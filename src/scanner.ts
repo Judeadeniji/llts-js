@@ -162,7 +162,9 @@ export function scan(source: string, path: string): ScanResult {
         return ch;
     };
 
-    const peek = () => (pos < source.length ? source[pos] : null);
+    const peek = (
+        step = 0
+    ) => (pos < source.length ? source[pos + step] : null);
     const previousToken = () => tokens[tokens.length - 1];
 
     const error = (msg: string, l = line, c = column) => {
@@ -329,21 +331,22 @@ export function scan(source: string, path: string): ScanResult {
             const startCol = column;
             let op = advance() || "";
 
-            // Check two-char operators (like >=, <=, ==, !=, &&, ||)
-            const nextChar = peek();
-            if (nextChar) {
-                const twoChar = op + nextChar;
-
-                if (BinOpValues.has(twoChar as BinOps) || AssignOpValues.has(twoChar as AssignOps)) {
-                    op += advance();
-                }
-
-                op = twoChar;
-            }
-
             tokens.push(new Token(startCol, line, BinOpValues.has(op as BinOps) ? "BIN_OP" : "UNARY_OP", op));
             return scanNext();
         }
+
+
+        // Check two-char operators (like >=, <=, ==, !=, &&, ||)
+        const twoCharOp = ch + peek(1);
+        if (BinOpValues.has(twoCharOp as BinOps) || AssignOpValues.has(twoCharOp as AssignOps)) {
+            const startCol = column;
+            advance();
+            advance();
+
+            tokens.push(new Token(startCol, line, BinOpValues.has(twoCharOp as BinOps) ? "BIN_OP" : "UNARY_OP", twoCharOp));
+            return scanNext();
+        }
+
 
         if (AssignOpValues.has(ch as AssignOps)) {
             const startCol = column;
