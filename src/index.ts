@@ -47,7 +47,8 @@ while (arg = args.shift()) {
         if (required && v === undefined) throw Error(`Missing value for "${c}"`);
 
         cmds.push({
-            c, v
+            c: command.long,
+            v
         })
     }
 }
