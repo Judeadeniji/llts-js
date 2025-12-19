@@ -1,9 +1,10 @@
 import type { CompilerKeywordToken, IToken } from "./scanner";
 
-export enum CompilerKeywords {
+export enum CompilerSymbols {
     import = "import",
     const = "const",
     typeOf = "typeOf",
+    func = "func",
 }
 
 export enum Literals {
@@ -69,7 +70,7 @@ export const PRECEDENCE: Record<string, number> = {
 export type Operator = BinOps | UnaryOps | AssignOps;
 
 export function isCompilerKeyword(token: string) {
-    return token in CompilerKeywords;
+    return token in CompilerSymbols;
 }
 
 export function isCompilerKeywordToken(token: IToken): token is CompilerKeywordToken {

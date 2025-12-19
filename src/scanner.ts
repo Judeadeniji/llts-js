@@ -1,4 +1,4 @@
-import { AssignOps, BinOps, CompilerKeywords, UnaryOps } from "./shared";
+import { AssignOps, BinOps, CompilerSymbols, UnaryOps } from "./shared";
 
 // 1. --- TYPES & DEFINITIONS ---
 export type TokenType =
@@ -45,11 +45,11 @@ export class Token implements IToken {
 
 export class CompilerKeywordToken extends Token {
     override readonly type = "COMPILER_KEYWORD";
-    override value: CompilerKeywords;
+    override value: CompilerSymbols;
     constructor(
         column: number,
         line: number,
-        value: CompilerKeywords,
+        value: CompilerSymbols,
     ) {
         super(column, line, "COMPILER_KEYWORD", value);
         this.value = value;
@@ -58,7 +58,8 @@ export class CompilerKeywordToken extends Token {
 
 enum Keywords {
     true = "true",
-    false = "false"
+    false = "false",
+    return = "return"
 }
 
 const Delimiters = {
@@ -67,6 +68,8 @@ const Delimiters = {
     COLON: ":",
     LEFT_PAREN: "(",
     RIGHT_PAREN: ")",
+    LEFT_BRACE: "{",
+    RIGHT_BRACE: "}",
     DOT: "."
 } as const;
 
@@ -79,6 +82,7 @@ const isKeyword = (w: string): boolean => w in Keywords;
 // compiler keywords e.g @sizeOf, @import, @include, etc. 
 const isCompilerKeyword = (w: string): boolean => w === "@";
 const isBool = (w: string) => (w === "true" || w === "false");
+const isDelimiter = (char: string) => Object.values(Delimiters).includes(char as any);
 
 // ANSI Colors for the console
 const colors = {
@@ -218,6 +222,8 @@ export function scan(source: string, path: string): ScanResult {
             return;
         }
 
+        if (!word) return;
+
         tokens.push(new Token(startCol, line, isKeyword(word) ? "KEYWORD" : "IDENTIFIER", word));
     };
 
@@ -242,15 +248,18 @@ export function scan(source: string, path: string): ScanResult {
         assert(
             path,
             source,
-            kw in CompilerKeywords,
+            kw in CompilerSymbols,
             `Expected compiler keyword after "@":\n    "@${kw}" is not a compiler keyword`,
             line,
             startCol
         );
-        tokens.push(new CompilerKeywordToken(startCol, line, kw as CompilerKeywords));
+        tokens.push(new CompilerKeywordToken(startCol, line, kw as CompilerSymbols));
     };
 
     const scanDelimiter = () => {
+        const char = peek();
+        if (!char) return;
+        if (!isDelimiter(char)) return;
         tokens.push({ type: "DELIMITER", value: peek()!, line, column } as Token);
         advance();
     };
@@ -271,7 +280,7 @@ export function scan(source: string, path: string): ScanResult {
 
         while (peek() === '.') {
             scanDelimiter();
-            if (!peek() || !isAlpha(peek()!)) {
+            if (!peek() || !isAlphaNumeric(peek()!)) {
                 error('Expected identifier after "."', line, column);
             }
             scanIdentifierOrKeyword();
@@ -327,18 +336,18 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
-        if (BinOpValues.has(ch as BinOps) || UnaryOpValues.has(ch as UnaryOps)) {
-            const startCol = column;
-            let op = advance() || "";
+        // Check two-char operators (like >=, <=, ==, !=, &&, ||)
+        const twoCharOp = ch + peek(1);
 
-            tokens.push(new Token(startCol, line, BinOpValues.has(op as BinOps) ? "BIN_OP" : "UNARY_OP", op));
+        if (AssignOpValues.has(twoCharOp as AssignOps)) {
+            const startCol = column;
+            advance();
+            advance();
+            tokens.push(new Token(startCol, line, "ASSIGN_OP", twoCharOp));
             return scanNext();
         }
 
-
-        // Check two-char operators (like >=, <=, ==, !=, &&, ||)
-        const twoCharOp = ch + peek(1);
-        if (BinOpValues.has(twoCharOp as BinOps) || AssignOpValues.has(twoCharOp as AssignOps)) {
+        if (BinOpValues.has(twoCharOp as BinOps)) {
             const startCol = column;
             advance();
             advance();
@@ -347,18 +356,16 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
-
-        if (AssignOpValues.has(ch as AssignOps)) {
+        if (BinOpValues.has(ch as BinOps) || UnaryOpValues.has(ch as UnaryOps) ||
+            AssignOpValues.has(ch as AssignOps)) {
             const startCol = column;
-            let op = advance();
-            const nextChar = peek();
-            if (nextChar) {
-                const twoChar = op + nextChar;
-                if (AssignOpValues.has(twoChar as AssignOps)) op += advance()!;
-            }
-            tokens.push(new Token(startCol, line, "ASSIGN_OP", op!));
+            let op = advance() || "";
+
+            tokens.push(new Token(startCol, line, BinOpValues.has(op as BinOps) ? "BIN_OP" : AssignOpValues.has(op as AssignOps) ? "ASSIGN_OP" : "UNARY_OP", op));
             return scanNext();
         }
+
+
 
         error(`Unexpected character: '${ch}'`, line, column);
         advance();

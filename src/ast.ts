@@ -14,6 +14,10 @@ export type NodeTypes =
   | "BinaryExpression"
   | "UnaryExpression"
   | "AssignmentExpression"
+  | "FunctionDeclaration"
+  | "Params"
+  | "BlockExpression"
+  | "ReturnExpression";
 
 export type PrimaryExpressions =
   | "Literal"
@@ -45,7 +49,7 @@ export class DocumentBody extends Node {
   override readonly nodeName = "DocumentBody";
 
   constructor(
-    public children: Node[] = [],
+    public statements: Node[] = [],
     location?: Location,
   ) {
     super(location);
@@ -102,6 +106,45 @@ export class MemberExpression extends Node {
   }
 }
 
+export class FunctionDeclaration extends Node {
+  override readonly nodeName = "FunctionDeclaration";
+
+  constructor(
+    public name: string,
+    public params: Params,
+    public body: BlockExpression,
+    override parent: Node | null = null,
+    location?: Location,
+  ) {
+    super(location);
+  }
+}
+
+export class Params extends Node {
+  override readonly nodeName = "Params";
+  override parent: FunctionDeclaration | null = null;
+
+  constructor(
+    public params: Node[],
+    location?: Location,
+  ) {
+    super(location);
+    params.forEach(p => p.parent = this);
+  }
+}
+
+export class BlockExpression extends Node {
+  override readonly nodeName = "BlockExpression";
+
+  constructor(
+    public statements: Node[],
+    override parent: FunctionDeclaration,
+    location?: Location,
+  ) {
+    super(location);
+  }
+}
+
 export class CallExpression extends Node {
   override readonly nodeName = "CallExpression";
 
@@ -141,6 +184,18 @@ export class ImportNode extends CompilerNode {
 
   constructor(
     public importPath: string,
+    location?: Location,
+  ) {
+    super(location);
+  }
+}
+
+export class ReturnExpression extends Node {
+  override readonly nodeName = "ReturnExpression";
+
+  constructor(
+    public argument: Node | null,
+    override parent: Node | null = null,
     location?: Location,
   ) {
     super(location);

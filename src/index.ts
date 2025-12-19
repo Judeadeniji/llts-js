@@ -70,9 +70,8 @@ async function parseInput(path: string) {
     const parser = new Parser();
 
     const result = await parser.parseFile(path);
-
-    for (const c of result.parsed.children) {
-        console.log(c)
-    }
+    console.dir(result.parsed, {
+        depth: Number.POSITIVE_INFINITY
+    })
 }
 

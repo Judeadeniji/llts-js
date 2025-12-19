@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { assert, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, CallExpression, DeclarationExpression, DocumentBody, ImportNode, LiteralExpression, MemberExpression, Node, PrimaryExpression, UnaryExpression, type AST } from "../ast"; // Assuming you have these AST nodes
-import { AssignOps, BinOps, CompilerKeywords, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, type AST } from "../ast"; // Assuming you have these AST nodes
+import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
     private tokens: Token[] = [];
@@ -10,8 +10,8 @@ export class Parser {
     private source: string = "";
 
     // 1. HELPER: Look at current token without consuming
-    private peek(): Token | null {
-        return this.tokens[this.current] || null;
+    private peek(step = 0): Token | null {
+        return this.tokens[this.current + step] || null;
     }
 
     // 2. HELPER: Look at previous token
@@ -67,18 +67,29 @@ export class Parser {
             if (statement) statements.push(statement);
         }
 
-        return new DocumentBody(statements);
+        const doc = new DocumentBody(statements);
+
+        statements.forEach(s => {
+            s.document = doc;
+            s.parent = doc;
+        })
+
+        return doc;
     }
 
     // Decides what kind of statement we are looking at
     private parseStatement(): Node {
         const token = this.peek()!;
+        console.log({ token });
 
-        console.log({ token })
 
         switch (token.type) {
-            case "V_REGISTER":
-                return this.parseDeclaration();
+            case "V_REGISTER": {
+                const nextToken = this.peek(1);
+                if (!nextToken) return this.parseDeclaration();
+                if (nextToken.type === "ASSIGN_OP") return this.parseDeclaration();
+                return this.parseExpressionStatement();
+            }
             case "BIN_OP":
             case "UNARY_OP":
             case "ASSIGN_OP":
@@ -86,6 +97,13 @@ export class Parser {
             case "STRING":
             case "NUMBER":
                 return this.parseExpressionStatement();
+
+            case "KEYWORD":
+                if (token.value === "return") return this.parseReturnStatement();
+                if (token.value === "true" || token.value === "false") return this.parseExpressionStatement();
+
+                reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected keyword: ${token.value}`);
+                process.exit(1);
 
             case "COMPILER_KEYWORD":
                 return this.parseCompilerKeyword();
@@ -97,7 +115,6 @@ export class Parser {
 
     private parseExpressionStatement(): Node {
         const expr = this.parseExpression();
-        console.log({ p: this.peek() })
         this.consume(
             "DELIMITER",
             `Expected ';' after expression, found "${this.peek()!.value}" instead`,
@@ -226,11 +243,19 @@ export class Parser {
 
             case "IDENTIFIER":
                 this.advance();
-                return new PrimaryExpression("Identifier", token.value);
+                return new PrimaryExpression("Identifier", token.value, null, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
 
             case "V_REGISTER":
                 this.advance();
-                return new PrimaryExpression("Register", token.value);
+                return new PrimaryExpression("Register", token.value, null, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
 
             case "DELIMITER":
                 if (token.value === "(") {
@@ -292,9 +317,8 @@ export class Parser {
     }
 
     private parseDeclarationWithoutType(register: Token, isConst: boolean) {
-        console.log({ register, isConst })
+        this.consume("ASSIGN_OP", `Expected "=" after "${register.value}"`, "=");
         const value = this.parseStatement();
-
         const t = this.peek()!;
 
         if (t.type === "DELIMITER" && t.value === ";") {
@@ -308,6 +332,53 @@ export class Parser {
         })
     }
 
+    private parseParamsList(): Node[] {
+        const peek = this.peek()!;
+
+        if (peek.type === "DELIMITER" && peek.value === ")") {
+            this.advance();
+            return [];
+        }
+
+        const params: Node[] = [];
+
+        do {
+            const name = this.consume("IDENTIFIER", "Expected parameter name");
+            if (!name) break;
+
+            let typeNode: Node | undefined;
+            if (this.check("DELIMITER") && this.peek()!.value === ":") {
+                this.advance();
+                const typeName = this.consume("IDENTIFIER", "Expected type name");
+                if (typeName) {
+                    typeNode = new PrimaryExpression("Identifier", typeName.value, null, {
+                        line: typeName.line,
+                        column: typeName.column,
+                        path: this.sourceFile?.name!
+                    });
+                }
+            }
+
+            // Create a dummy value for the parameter declaration
+            const dummyValue = new LiteralExpression(Literals.number, "0", null, undefined, {
+                line: name.line,
+                column: name.column,
+                path: this.sourceFile?.name!
+            });
+
+            const param = new DeclarationExpression(name.value, dummyValue, false, null, typeNode, {
+                line: name.line,
+                column: name.column,
+                path: this.sourceFile?.name!
+            });
+
+            params.push(param);
+
+        } while (this.match("DELIMITER") && this.previous()!.value === ",");
+
+        return params;
+    }
+
     private parseCompilerKeyword(): Node {
         const keyword = this.advance()!;
         if (!isCompilerKeywordToken(keyword)) {
@@ -315,13 +386,88 @@ export class Parser {
         }
 
         switch (keyword.value) {
-            case CompilerKeywords.import:
+            case CompilerSymbols.import:
                 return this.parsecompilerImport();
-            case CompilerKeywords.const:
+            case CompilerSymbols.const:
                 return this.parseCompilerConst();
-            case CompilerKeywords.typeOf:
-                return this.parseCompilerTypof()
+            case CompilerSymbols.typeOf:
+                return this.parseCompilerTypof();
+            case CompilerSymbols.func:
+                return this.parseCompilerFunc();
         }
+    }
+
+    private parseReturnStatement(): Node {
+        const keyword = this.consume("KEYWORD", "Expected 'return'", "return")!;
+        let argument: Node | null = null;
+        if (!this.check("DELIMITER") || this.peek()!.value !== ";") {
+            argument = this.parseExpression();
+        }
+        this.consume("DELIMITER", "Expected ';'", ";");
+        return new ReturnExpression(argument, null, {
+            line: keyword.line,
+            column: keyword.column,
+            path: this.sourceFile?.name!
+        });
+    }
+
+    private parseBlock(): BlockExpression {
+        this.consume("DELIMITER", "Expected '{'", "{");
+        const statements: Node[] = [];
+
+        while (!this.isAtEnd() && !(this.peek()?.type === "DELIMITER" && this.peek()?.value === "}")) {
+            const stmt = this.parseStatement();
+            if (stmt) statements.push(stmt);
+        }
+
+        this.consume("DELIMITER", "Expected '}'", "}");
+
+        return new BlockExpression(statements, null as any, {
+            line: this.peek()?.line || 0,
+            column: 0,
+            path: this.sourceFile?.name!
+        });
+    }
+
+    parseCompilerFunc(): Node {
+        const name = this.advance();
+
+        if (!name || name.type !== "IDENTIFIER") {
+            reportError(this.sourceFile?.name!, this.source, name!.line, name!.column, `Expected a valid function name but found "${name?.value}" instead.`);
+            process.exit(1);
+        }
+
+        this.consume("DELIMITER", `Expected "(" after function name but found "${this.peek()!.value}" instead.`, "(")
+
+        const params = new Params(this.parseParamsList());
+
+        // check if return type
+        if (this.check("DELIMITER") && this.peek()?.value === ":") {
+            this.advance(); // eat ":"
+            // handle return types
+            const typeName = this.consume("IDENTIFIER", "Expected type name");
+            if (!typeName) {
+                reportError(this.sourceFile?.name!, this.source, typeName!.line, typeName!.column, `Expected a valid type name instead.`);
+                process.exit(1);
+            }
+
+            console.log({ typeName: typeName.value });
+        }
+
+
+        const body = this.parseBlock();
+
+        const func = new FunctionDeclaration(name.value, params, body, null, {
+            line: name.line,
+            column: name.column,
+            path: this.sourceFile?.name!
+        });
+
+        // Fix up parents
+        body.parent = func;
+        params.parent = func;
+
+        return func;
     }
 
     parseCompilerTypof(): Node {
@@ -382,8 +528,8 @@ export class Parser {
         this.tokens = scannerResult.tokens;
         this.current = 0;
 
-        console.log(...this.tokens)
-        process.exit(0);
+        // console.log(...this.tokens)
+        // process.exit(0);
 
         return this.buildAst();
     }
