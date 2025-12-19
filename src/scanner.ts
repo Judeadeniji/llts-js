@@ -223,11 +223,11 @@ export function scan(source: string, path: string): ScanResult {
 
     const scanRegister = () => {
         const startCol = column;
-        advance(); // '%'
+        advance(); // '$'
         let name = "";
         while (peek() && isAlphaNumeric(peek()!)) name += advance();
         // if (peek() === " ") return scanNext();
-        if (!name) error(`Expected register name after '%' but found "${peek()}" instead`, line, column);
+        if (!name) error(`Expected register name after '$' but found "${peek()}" instead`, line, column);
         if (peek() === ':') handleTypeDecl();
         tokens.push(new Token(startCol, line, "V_REGISTER", name));
     };
@@ -290,7 +290,7 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
-        if (ch === '/' && source[pos + 1] === '/') {
+        if (ch === '#') {
             skipComment();
             return scanNext();
         }
@@ -305,7 +305,7 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
-        if (ch === '%') {
+        if (ch === '$') {
             scanRegister();
             if (peek() === '.') scanMemberExpression();
             return scanNext();

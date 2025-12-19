@@ -271,7 +271,7 @@ export class Parser {
 
     // Handles "DEC var1, var2;"
     private parseDeclaration(isConst = false) {
-        const register = this.consume("V_REGISTER", "Expected %{registerName}")!;
+        const register = this.consume("V_REGISTER", "Expected ${registerName}")!;
         // next thing could be a type declaration
         const peek = this.peek()!;
         switch (peek.type) {

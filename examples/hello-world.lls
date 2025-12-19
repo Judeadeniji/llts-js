@@ -1,1 +1,53 @@
-%a 1 && v;
+@const $std @import("std");
+
+# literals + registers
+@const $msg "Hello, LLTS!";
+$a 10;
+$b 20;
+$c 3;
+
+# basic binary ops
+$d a + b;
+$e a * b + c;
+$f a + b * c;
+$g (a + b) * c;
+
+# unary ops
+$h -a;
+$i !b;
+
+# chained binary ops
+$j 1 + a + b + c;
+$k a * b / c % 2;
+
+# assignment expressions
+$l a = b = c + 1;
+
+# function calls
+$m add(a, b);
+$n add(1, add(a, b));
+
+# member access
+$o std.debug;
+$p std.debug.printLn;
+
+# call + member chaining
+$q std.debug.printLn("sum = {i}", a + b);
+$r std.debug.printLn("calc = {i}", add(a, b) * c);
+
+# currying / call chaining
+$s getAdder(1)(2);
+$t factory().build().run();
+
+# mixed madness (but legal)
+$u std.math.add(1, a + b * c);
+$v (get().next())(a + b);
+
+# final side-effect call
+std.debug.printLn(
+    "a={i}, b={i}, c={i}, result={i}",
+    a,
+    b,
+    c,
+    a + b * c
+);
