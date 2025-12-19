@@ -1,0 +1,6 @@
+@const $LIMIT = 10;
+$i = 1 && 0x10;
+
+@while ($i < $LIMIT) {
+  $i += 1;
+}

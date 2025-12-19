@@ -96,6 +96,10 @@ export class Parser {
             case "IDENTIFIER":
             case "STRING":
             case "NUMBER":
+            case "HEX":
+            case "BINARY":
+            case "OCTAL":
+            case "BOOLEAN":
                 return this.parseExpressionStatement();
 
             case "KEYWORD":
@@ -237,8 +241,12 @@ export class Parser {
         const token = this.peek()!;
 
         switch (token.type) {
-            case "NUMBER":
+            case "BOOLEAN":
             case "STRING":
+            case "NUMBER":
+            case "HEX":
+            case "BINARY":
+            case "OCTAL":
                 return this.parseLiteral();
 
             case "IDENTIFIER":
@@ -276,8 +284,32 @@ export class Parser {
         const token = this.advance()!;
 
         switch (token.type) {
+            case "BOOLEAN":
+              return new LiteralExpression(Literals.boolean, token.value, null, undefined, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
             case "STRING":
                 return new LiteralExpression(Literals.string, token.value, null, undefined, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
+            case "HEX":
+              return new LiteralExpression(Literals.hex, token.value, null, undefined, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
+            case "BINARY":
+              return new LiteralExpression(Literals.binary, token.value, null, undefined, {
+                    column: token.column,
+                    line: token.line,
+                    path: this.sourceFile?.name!
+                });
+            case "OCTAL":
+              return new LiteralExpression(Literals.octal, token.value, null, undefined, {
                     column: token.column,
                     line: token.line,
                     path: this.sourceFile?.name!
@@ -296,7 +328,7 @@ export class Parser {
 
     // Handles "DEC var1, var2;"
     private parseDeclaration(isConst = false) {
-        const register = this.consume("V_REGISTER", "Expected ${registerName}")!;
+        const register = this.consume("V_REGISTER", `Expected $RegisterName but found "${this.peek()!.value}" instead.`)!;
         // next thing could be a type declaration
         const peek = this.peek()!;
         switch (peek.type) {
@@ -394,8 +426,21 @@ export class Parser {
                 return this.parseCompilerTypof();
             case CompilerSymbols.func:
                 return this.parseCompilerFunc();
+            case CompilerSymbols.while:
+              return this.parseWhileExpression();
+            case CompilerSymbols.for:
+                return this.parseForExpression();
         }
     }
+    
+    private parseWhileExpression(): Node {
+        throw new Error("Method not implemented.");
+    }
+    
+    private parseForExpression(): Node {
+        throw new Error("Method not implemented.");
+    }
+
 
     private parseReturnStatement(): Node {
         const keyword = this.consume("KEYWORD", "Expected 'return'", "return")!;

@@ -5,12 +5,16 @@ export enum CompilerSymbols {
     const = "const",
     typeOf = "typeOf",
     func = "func",
+    while = "while",
+    for = "switch",
 }
 
 export enum Literals {
     number = "number",
     string = "string",
-    boolean = "boolean"
+    boolean = "boolean",
+    hex = "hex",
+    octal = "octal",
 }
 
 export enum BinOps {
@@ -53,6 +57,8 @@ export enum AssignOps {
     orAssign = "||=",
     notAssign = "!=",
 }
+
+// TODO: ADD BITWISE OPERATORS
 
 export const PRECEDENCE: Record<string, number> = {
     "=": 1,

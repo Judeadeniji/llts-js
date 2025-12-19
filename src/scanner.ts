@@ -8,6 +8,9 @@ export type TokenType =
     | "COMPILER_KEYWORD"
     | "STRING"
     | "NUMBER"
+    | "HEX"
+    | "OCTAL"
+    | "FLOAT"
     | "BOOLEAN"
     | "DELIMITER"
     | "TYPE_DECL"
@@ -208,9 +211,63 @@ export function scan(source: string, path: string): ScanResult {
     const scanNumber = () => {
         const startCol = column;
         let num = "";
-        while (peek() && isDigit(peek()!)) num += advance();
+
+        // Check for Bases: Hex (0x), Binary (0b), Octal (0o)
+        if (peek() === '0') {
+            const next = peek(1);
+            
+            // Hexadecimal
+            if (next === 'x' || next === 'X') {
+                num += advance(); // 0
+                num += advance(); // x
+                while (peek() && /[0-9a-fA-F]/.test(peek()!)) {
+                    num += advance();
+                }
+                tokens.push(new Token(startCol, line, "HEX", num));
+                return;
+            }
+
+            // Binary
+            if (next === 'b' || next === 'B') {
+                num += advance(); // 0
+                num += advance(); // b
+                while (peek() && /[0-1]/.test(peek()!)) {
+                    num += advance();
+                }
+                tokens.push(new Token(startCol, line, "BINARY", num));
+                return;
+            }
+
+            // Octal
+            if (next === 'o' || next === 'O') {
+                num += advance(); // 0
+                num += advance(); // o
+                while (peek() && /[0-7]/.test(peek()!)) {
+                    num += advance();
+                }
+                tokens.push(new Token(startCol, line, "OCTAL", num));
+                return;
+            }
+        }
+
+        // Standard Integer
+        while (peek() && isDigit(peek()!)) {
+            num += advance();
+        }
+
+        // Floating Point
+        // We only consume the dot if it is strictly followed by a digit.
+        // This handles "1.5" correctly, while leaving "1.toString()" for the dot delimiter.
+        if (peek() === '.' && peek(1) && isDigit(peek(1)!)) {
+            num += advance(); // consume '.'
+            while (peek() && isDigit(peek()!)) {
+                num += advance();
+            }
+        }
+
         tokens.push(new Token(startCol, line, "NUMBER", num));
     };
+
 
     const scanIdentifierOrKeyword = () => {
         const startCol = column;
