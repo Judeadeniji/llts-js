@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, type AST } from "../ast"; // Assuming you have these AST nodes
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, type AST } from "../ast";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
