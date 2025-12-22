@@ -33,6 +33,8 @@ export enum BinOps {
     lte = "<=",
     and = "&&",
     or = "||",
+    sqr = "**",
+    pipe = "|>",
 }
 
 export enum UnaryOps {
@@ -68,8 +70,8 @@ export const PRECEDENCE: Record<string, number> = {
     "&&": 3,
     "==": 4, "!=": 4,
     ">": 5, ">=": 5, "<": 5, "<=": 5,
-    "+": 6, "-": 6,
-    "*": 7, "/": 7, "%": 7,
+    "+": 6, "-": 6, "|>": 6,
+    "*": 7, "/": 7, "%": 7, "**": 7,
     "^": 8
 };
 

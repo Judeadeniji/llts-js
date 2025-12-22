@@ -119,6 +119,7 @@ export class Parser {
 
     private parseExpressionStatement(): Node {
         const expr = this.parseExpression();
+        console.log(expr)
         this.consume(
             "DELIMITER",
             `Expected ';' after expression, found "${this.peek()!.value}" instead`,
@@ -150,6 +151,7 @@ export class Parser {
 
         while (true) {
             const tok = this.peek();
+            console.log({tok})
             if (!tok || tok.type !== "BIN_OP") break;
 
             const prec = PRECEDENCE[tok.value];
@@ -469,12 +471,12 @@ export class Parser {
 
     private parseReturnStatement(): Node {
         const keyword = this.consume("KEYWORD", `Expected "${Keywords.return}"`, Keywords.return)!;
-        let argument: Node | null = null;
+        let returnValue: Node | null = null;
         if (!this.check("DELIMITER") || this.peek()!.value !== Delimiters.SEMICOLON) {
-            argument = this.parseExpression();
+            returnValue = this.parseExpression();
         }
         this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}"`, Delimiters.SEMICOLON);
-        return new ReturnExpression(argument, null, {
+        return new ReturnExpression(returnValue, null, {
             line: keyword.line,
             column: keyword.column,
             path: this.sourceFile?.name!
