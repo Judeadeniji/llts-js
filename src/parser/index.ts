@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import { assert, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, type AST } from "../ast"; // Assuming you have these AST nodes
+import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, type AST } from "../ast"; // Assuming you have these AST nodes
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
@@ -122,7 +122,7 @@ export class Parser {
         this.consume(
             "DELIMITER",
             `Expected ';' after expression, found "${this.peek()!.value}" instead`,
-            ";"
+            Delimiters.SEMICOLON
         );
         return expr;
     }
@@ -191,7 +191,7 @@ export class Parser {
         while (true) {
             const tok = this.peek();
 
-            if (tok?.type === "DELIMITER" && tok.value === "(") {
+            if (tok?.type === "DELIMITER" && tok.value === Delimiters.LEFT_PAREN) {
                 expr = this.finishCall(expr);
                 continue;
             }
@@ -216,11 +216,11 @@ export class Parser {
     }
 
     private finishCall(callee: Node): Node {
-        this.consume("DELIMITER", "Expected '('", "(");
+        this.consume("DELIMITER", "Expected '('", Delimiters.LEFT_PAREN);
 
         const args: Node[] = [];
 
-        if (!(this.peek()!.type === "DELIMITER" && this.peek()!.value === ")")) {
+        if (!(this.peek()!.type === "DELIMITER" && this.peek()!.value === Delimiters.RIGHT_PAREN)) {
             do {
                 args.push(this.parseExpression());
             } while (
@@ -230,7 +230,7 @@ export class Parser {
         }
 
         const next = this.peek()!;
-        if (next.type === "DELIMITER" && next.value === ")") {
+        if (next.type === "DELIMITER" && next.value === Delimiters.RIGHT_PAREN) {
             this.advance();
         }
 
@@ -266,10 +266,10 @@ export class Parser {
                 });
 
             case "DELIMITER":
-                if (token.value === "(") {
+                if (token.value === Delimiters.LEFT_PAREN) {
                     this.advance();
                     const expr = this.parseExpression();
-                    this.consume("DELIMITER", "Expected ')'", ")");
+                    this.consume("DELIMITER", "Expected ')'", Delimiters.RIGHT_PAREN);
                     return expr;
                 }
         }
@@ -285,7 +285,7 @@ export class Parser {
 
         switch (token.type) {
             case "BOOLEAN":
-              return new LiteralExpression(Literals.boolean, token.value, null, undefined, {
+                return new LiteralExpression(Literals.boolean, token.value, null, undefined, {
                     column: token.column,
                     line: token.line,
                     path: this.sourceFile?.name!
@@ -297,19 +297,19 @@ export class Parser {
                     path: this.sourceFile?.name!
                 });
             case "HEX":
-              return new LiteralExpression(Literals.hex, token.value, null, undefined, {
+                return new LiteralExpression(Literals.hex, token.value, null, undefined, {
                     column: token.column,
                     line: token.line,
                     path: this.sourceFile?.name!
                 });
             case "BINARY":
-              return new LiteralExpression(Literals.binary, token.value, null, undefined, {
+                return new LiteralExpression(Literals.binary, token.value, null, undefined, {
                     column: token.column,
                     line: token.line,
                     path: this.sourceFile?.name!
                 });
             case "OCTAL":
-              return new LiteralExpression(Literals.octal, token.value, null, undefined, {
+                return new LiteralExpression(Literals.octal, token.value, null, undefined, {
                     column: token.column,
                     line: token.line,
                     path: this.sourceFile?.name!
@@ -353,7 +353,7 @@ export class Parser {
         const value = this.parseStatement();
         const t = this.peek()!;
 
-        if (t.type === "DELIMITER" && t.value === ";") {
+        if (t.type === "DELIMITER" && t.value === Delimiters.SEMICOLON) {
             this.advance();
         }
 
@@ -367,7 +367,7 @@ export class Parser {
     private parseParamsList(): Node[] {
         const peek = this.peek()!;
 
-        if (peek.type === "DELIMITER" && peek.value === ")") {
+        if (peek.type === "DELIMITER" && peek.value === Delimiters.RIGHT_PAREN) {
             this.advance();
             return [];
         }
@@ -427,28 +427,53 @@ export class Parser {
             case CompilerSymbols.func:
                 return this.parseCompilerFunc();
             case CompilerSymbols.while:
-              return this.parseWhileExpression();
+                return this.parseWhileExpression();
             case CompilerSymbols.for:
                 return this.parseForExpression();
         }
     }
-    
+
     private parseWhileExpression(): Node {
-        throw new Error("Method not implemented.");
+        const whileToken = this.peek()!;
+        this.consume("DELIMITER", `Expects "${Delimiters.LEFT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.LEFT_PAREN);
+        const cond = this.parseExpression();
+        this.consume("DELIMITER", `Expects "${Delimiters.RIGHT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.RIGHT_PAREN);
+
+        const pipeToken = this.peek()!;
+        let pipeValue: Node | null = null;
+
+        if (pipeToken.type === "DELIMITER" && pipeToken.value === Delimiters.PIPE) {
+            this.advance();
+            pipeValue = this.parsePrimary(); // only primary expressions are allowed
+            this.consume("DELIMITER", `Unexpected token "${this.peek()?.value}" expected "${Delimiters.PIPE}" instead.`, Delimiters.PIPE);
+        }
+
+        const body = this.parseBlock();
+
+        // TODO: Add support for else block
+        // const else block = this.parseControlFlowTail();
+
+        const whileExpr = new WhileExpression(cond, pipeValue, body, null, {
+            line: whileToken.line,
+            column: whileToken.column,
+            path: this.sourceFile?.name!
+        })
+
+        return whileExpr;
     }
-    
+
     private parseForExpression(): Node {
         throw new Error("Method not implemented.");
     }
 
 
     private parseReturnStatement(): Node {
-        const keyword = this.consume("KEYWORD", "Expected 'return'", "return")!;
+        const keyword = this.consume("KEYWORD", `Expected "${Keywords.return}"`, Keywords.return)!;
         let argument: Node | null = null;
-        if (!this.check("DELIMITER") || this.peek()!.value !== ";") {
+        if (!this.check("DELIMITER") || this.peek()!.value !== Delimiters.SEMICOLON) {
             argument = this.parseExpression();
         }
-        this.consume("DELIMITER", "Expected ';'", ";");
+        this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}"`, Delimiters.SEMICOLON);
         return new ReturnExpression(argument, null, {
             line: keyword.line,
             column: keyword.column,
@@ -457,15 +482,15 @@ export class Parser {
     }
 
     private parseBlock(): BlockExpression {
-        this.consume("DELIMITER", "Expected '{'", "{");
+        this.consume("DELIMITER", "Expected '{'", Delimiters.LEFT_BRACE);
         const statements: Node[] = [];
 
-        while (!this.isAtEnd() && !(this.peek()?.type === "DELIMITER" && this.peek()?.value === "}")) {
+        while (!this.isAtEnd() && !(this.peek()?.type === "DELIMITER" && this.peek()?.value === Delimiters.RIGHT_BRACE)) {
             const stmt = this.parseStatement();
             if (stmt) statements.push(stmt);
         }
 
-        this.consume("DELIMITER", "Expected '}'", "}");
+        this.consume("DELIMITER", "Expected '}'", Delimiters.RIGHT_BRACE);
 
         return new BlockExpression(statements, null as any, {
             line: this.peek()?.line || 0,
@@ -482,7 +507,7 @@ export class Parser {
             process.exit(1);
         }
 
-        this.consume("DELIMITER", `Expected "(" after function name but found "${this.peek()!.value}" instead.`, "(")
+        this.consume("DELIMITER", `Expected "${Delimiters.LEFT_PAREN}" after function name but found "${this.peek()!.value}" instead.`, Delimiters.LEFT_PAREN)
 
         const params = new Params(this.parseParamsList());
 
@@ -526,7 +551,7 @@ export class Parser {
     parsecompilerImport(): Node {
         const leftParen = this.peek()!;
 
-        assert(this.sourceFile?.name!, this.source, leftParen.value === "(", "Expected \"(\" after import", leftParen.line, leftParen.column)
+        assert(this.sourceFile?.name!, this.source, leftParen.value === Delimiters.LEFT_PAREN, "Expected \"(\" after import", leftParen.line, leftParen.column)
         this.advance();
 
         const _import = this.peek()!;
@@ -540,13 +565,13 @@ export class Parser {
         assert(
             this.sourceFile?.name!,
             this.source,
-            this.peek()!.value === ")", "Expected \")\" after import path",
+            this.peek()!.value === Delimiters.RIGHT_PAREN, "Expected \")\" after import path",
             this.peek()!.line,
             this.peek()!.column
         )
 
         this.advance();
-        this.consume("DELIMITER", `Expected ";" after import statement, found "${this.peek()!.value}" instead`, ";")
+        this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}" after import statement, found "${this.peek()!.value}" instead`, Delimiters.SEMICOLON)
 
         return new ImportNode(importPath.value, {
             line: importPath.line,

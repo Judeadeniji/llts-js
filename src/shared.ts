@@ -15,6 +15,7 @@ export enum Literals {
     boolean = "boolean",
     hex = "hex",
     octal = "octal",
+    binary = "binary"
 }
 
 export enum BinOps {

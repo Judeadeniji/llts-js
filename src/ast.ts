@@ -17,7 +17,8 @@ export type NodeTypes =
   | "FunctionDeclaration"
   | "Params"
   | "BlockExpression"
-  | "ReturnExpression";
+  | "ReturnExpression"
+  | "WhileExpression";
 
 export type PrimaryExpressions =
   | "Literal"
@@ -199,5 +200,21 @@ export class ReturnExpression extends Node {
     location?: Location,
   ) {
     super(location);
+  }
+}
+
+
+export class WhileExpression extends Node {
+  override readonly nodeName = "WhileExpression";
+
+
+  constructor(
+    public condition: Node,
+    public pipeValue: Node | null,
+    public body: BlockExpression,
+    public tail: Node | null = null,
+    location?: Location,
+  ) {
+    super(location)
   }
 }

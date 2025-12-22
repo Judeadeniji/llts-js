@@ -11,6 +11,7 @@ export type TokenType =
     | "HEX"
     | "OCTAL"
     | "FLOAT"
+    | "BINARY"
     | "BOOLEAN"
     | "DELIMITER"
     | "TYPE_DECL"
@@ -59,13 +60,13 @@ export class CompilerKeywordToken extends Token {
     }
 }
 
-enum Keywords {
+export enum Keywords {
     true = "true",
     false = "false",
     return = "return"
 }
 
-const Delimiters = {
+export const Delimiters = {
     COMMA: ",",
     SEMICOLON: ";",
     COLON: ":",
@@ -73,7 +74,8 @@ const Delimiters = {
     RIGHT_PAREN: ")",
     LEFT_BRACE: "{",
     RIGHT_BRACE: "}",
-    DOT: "."
+    DOT: ".",
+    PIPE: "|",
 } as const;
 
 // 2. --- HELPERS ---
@@ -215,7 +217,7 @@ export function scan(source: string, path: string): ScanResult {
         // Check for Bases: Hex (0x), Binary (0b), Octal (0o)
         if (peek() === '0') {
             const next = peek(1);
-            
+
             // Hexadecimal
             if (next === 'x' || next === 'X') {
                 num += advance(); // 0
