@@ -80,8 +80,6 @@ export class Parser {
     // Decides what kind of statement we are looking at
     private parseStatement(): Node {
         const token = this.peek()!;
-        console.log({ token });
-
 
         switch (token.type) {
             case "V_REGISTER": {
@@ -111,6 +109,10 @@ export class Parser {
 
             case "COMPILER_KEYWORD":
                 return this.parseCompilerKeyword();
+            case "DELIMITER":
+                if (token.value === Delimiters.LEFT_PAREN) return this.parseExpressionStatement();
+                reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected token: ${token.value} at line ${token.line}`);
+                process.exit(1);
             default:
                 reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected token: ${token.value} at line ${token.line}`);
                 process.exit(1);
