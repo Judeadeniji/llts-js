@@ -195,7 +195,7 @@ export class ReturnExpression extends Node {
   override readonly nodeName = "ReturnExpression";
 
   constructor(
-    public argument: Node | null,
+    public returnValue: Node | null,
     override parent: Node | null = null,
     location?: Location,
   ) {

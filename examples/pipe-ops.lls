@@ -1,0 +1,5 @@
+@func sqr(a) {
+ return a**2;
+}
+
+$a = 2 |> sqr;

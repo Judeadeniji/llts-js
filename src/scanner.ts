@@ -368,10 +368,6 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
-        if (Object.values(Delimiters).includes(ch as any)) {
-            scanDelimiter();
-            return scanNext();
-        }
 
         if (ch === '$') {
             scanRegister();
@@ -424,6 +420,12 @@ export function scan(source: string, path: string): ScanResult {
             return scanNext();
         }
 
+
+        // Delimeters should be always last
+        if (Object.values(Delimiters).includes(ch as any)) {
+            scanDelimiter();
+            return scanNext();
+        }
 
 
         error(`Unexpected character: '${ch}'`, line, column);
