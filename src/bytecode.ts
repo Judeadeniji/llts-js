@@ -25,6 +25,9 @@ export enum OpCode {
     OP_NOT,
     OP_DUP,
     
+    // Strings
+    OP_MAKE_STRING,
+    
     // Variables
     OP_SET_GLOBAL,    // [OP, const_index_of_name]
     OP_GET_GLOBAL,    // [OP, const_index_of_name]

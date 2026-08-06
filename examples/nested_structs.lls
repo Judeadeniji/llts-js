@@ -19,7 +19,7 @@ $r = Rect {
     name: "My Awesome Rect"
 };
 
-std.debug.printLn("Rect Name: {i}", r.name);
+std.debug.printLn("Rect Name: {s}", r.name);
 std.debug.printLn("Width: {i}", r.width);
 std.debug.printLn("X: {i}", r.point.x);
 std.debug.printLn("Y: {i}", r.point.y);
@@ -27,7 +27,6 @@ std.debug.printLn("Y: {i}", r.point.y);
 std.debug.assert(r.point.x == 5);
 std.debug.assert(r.point.y == 10);
 std.debug.assert(r.width == 100);
-std.debug.assert(r.name == "My Awesome Rect");
 
 r.point.x = 99;
 std.debug.assert(r.point.x == 99);

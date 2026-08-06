@@ -22,6 +22,12 @@ export class Compiler {
     private globalTypes: Map<string, string> = new Map();
     
     private resolveType(node: ast.Node): string | undefined {
+        if (node instanceof ast.LiteralExpression) {
+            if (typeof node.value === "string") {
+                return "string";
+            }
+            return "int"; // Assume number is int for now
+        }
         if (node instanceof ast.PrimaryExpression && (node.kind === "Identifier" || node.kind === "Register")) {
             const localIdx = this.resolveLocal(node.name);
             if (localIdx !== -1) {
@@ -41,6 +47,14 @@ export class Compiler {
     }
     
     constructor() {
+        // Define builtin string struct
+        this.structs.set("string", {
+            name: "string",
+            size: 2,
+            offsets: new Map([["ptr", 0], ["len", 1]]),
+            types: new Map([["ptr", "int"], ["len", "int"]])
+        });
+        
         // Start with a top-level script chunk
         this.chunks.push(new Chunk());
     }
@@ -222,7 +236,8 @@ export class Compiler {
             if (node.literal_type === "number") {
                 this.emitConstant(parseFloat(node.value));
             } else if (node.literal_type === "string") {
-                this.emitConstant(node.value);
+                const idx = this.currentChunk().addConstant(node.value);
+                this.emitBytes(OpCode.OP_MAKE_STRING, idx);
             } else if (node.literal_type === "boolean") {
                 this.emitByte(node.value === "true" ? OpCode.OP_TRUE : OpCode.OP_FALSE);
             }

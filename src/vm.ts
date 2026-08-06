@@ -27,10 +27,28 @@ export class VM {
         });
 
         this.defineNative("__printLn", (args: Value[]) => {
-            let msg = args[0] as string;
+            const ptr = args[0] as number;
+            const charPtr = this.memory[ptr] as number;
+            const len = this.memory[ptr + 1] as number;
+            let msg = "";
+            for (let i = 0; i < len; i++) {
+                msg += String.fromCharCode(this.memory[charPtr + i] as number);
+            }
+            
             for (let i = 1; i < args.length; i++) {
-                if (args[i] !== undefined && typeof msg === 'string') {
-                    msg = msg.replace("{i}", String(args[i]));
+                if (args[i] !== undefined) {
+                    if (msg.includes("{s}")) {
+                        const strPtr = args[i] as number;
+                        const charPtr = this.memory[strPtr] as number;
+                        const len = this.memory[strPtr + 1] as number;
+                        let s = "";
+                        for (let j = 0; j < len; j++) {
+                            s += String.fromCharCode(this.memory[charPtr + j] as number);
+                        }
+                        msg = msg.replace("{s}", s);
+                    } else if (msg.includes("{i}")) {
+                        msg = msg.replace("{i}", String(args[i]));
+                    }
                 }
             }
             console.log(msg);
@@ -92,6 +110,21 @@ export class VM {
                 case OpCode.OP_DUP:
                     this.push(this.peek(0));
                     break;
+                case OpCode.OP_MAKE_STRING: {
+                    const strIdx = readByte();
+                    const str = chunk.constants[strIdx] as string;
+                    const charPtr = this.heapPointer;
+                    this.heapPointer += str.length;
+                    for (let i = 0; i < str.length; i++) {
+                        this.memory[charPtr + i] = str.charCodeAt(i);
+                    }
+                    const structPtr = this.heapPointer;
+                    this.heapPointer += 2;
+                    this.memory[structPtr] = charPtr;
+                    this.memory[structPtr + 1] = str.length;
+                    this.push(structPtr);
+                    break;
+                }
                 case OpCode.OP_GET_LOCAL:
                     const localSlot = readByte();
                     this.push(this.stack[frame.baseSlot + localSlot]);
