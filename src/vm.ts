@@ -89,6 +89,9 @@ export class VM {
                 case OpCode.OP_POP:
                     this.stack.pop();
                     break;
+                case OpCode.OP_DUP:
+                    this.push(this.peek(0));
+                    break;
                 case OpCode.OP_GET_LOCAL:
                     const localSlot = readByte();
                     this.push(this.stack[frame.baseSlot + localSlot]);

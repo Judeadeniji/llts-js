@@ -23,6 +23,7 @@ export enum OpCode {
     // Unary
     OP_NEGATE,
     OP_NOT,
+    OP_DUP,
     
     // Variables
     OP_SET_GLOBAL,    // [OP, const_index_of_name]

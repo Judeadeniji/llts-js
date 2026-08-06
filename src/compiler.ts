@@ -2,13 +2,23 @@ import * as ast from "./ast";
 import { Chunk, FunctionObj, OpCode } from "./bytecode";
 
 class Local {
+    public typeName?: string;
     constructor(public name: string, public depth: number) {}
 }
 
+interface StructDef {
+    name: string;
+    size: number;
+    offsets: Map<string, number>;
+}
+
 export class Compiler {
-    private chunks: Chunk[] = [];
+    private chunks: Chunk[] = [new Chunk()];
     private locals: Local[] = [];
     private scopeDepth = 0;
+    private functions: ast.FunctionDeclaration[] = [];
+    private structs: Map<string, StructDef> = new Map();
+    private globalTypes: Map<string, string> = new Map();
     
     constructor() {
         // Start with a top-level script chunk
@@ -53,9 +63,19 @@ export class Compiler {
         } else if (node instanceof ast.DeclarationExpression) {
             this.compileExpression(node.value);
             
+            let typeName: string | undefined;
+            if (node.value instanceof ast.StructInitialization) {
+                typeName = node.value.name;
+            }
+
             if (this.scopeDepth > 0) {
-                this.locals.push(new Local(node.name, this.scopeDepth));
+                const local = new Local(node.name, this.scopeDepth);
+                local.typeName = typeName;
+                this.locals.push(local);
             } else {
+                if (typeName) {
+                    this.globalTypes.set(node.name, typeName);
+                }
                 const nameIdx = this.currentChunk().addConstant(node.name);
                 this.emitBytes(OpCode.OP_SET_GLOBAL, nameIdx);
                 this.emitByte(OpCode.OP_POP); // Declaration doesn't leave value on stack
@@ -73,6 +93,13 @@ export class Compiler {
                 this.emitByte(OpCode.OP_NULL);
             }
             this.emitByte(OpCode.OP_RETURN);
+        } else if (node instanceof ast.StructDeclaration) {
+            const offsets = new Map<string, number>();
+            let size = 0;
+            for (const field of node.fields) {
+                offsets.set(field.name, size++);
+            }
+            this.structs.set(node.name, { name: node.name, size, offsets });
         } else if (node instanceof ast.IfExpression) {
             this.compileExpression(node.condition);
             
@@ -185,6 +212,38 @@ export class Compiler {
                 this.compileExpression(node.left.index);
                 this.compileExpression(node.right);
                 this.emitByte(OpCode.OP_SET_INDEX);
+            } else if (node.left instanceof ast.MemberExpression) {
+                if (node.left.object instanceof ast.PrimaryExpression && (node.left.object.kind === "Identifier" || node.left.object.kind === "Register")) {
+                    const localIdx = this.resolveLocal(node.left.object.name);
+                    let typeName: string | undefined;
+                    if (localIdx !== -1) {
+                        typeName = this.locals[localIdx]?.typeName;
+                    } else {
+                        typeName = this.globalTypes.get(node.left.object.name);
+                    }
+                    
+                    if (typeName) {
+                        const structDef = this.structs.get(typeName);
+                        if (structDef && node.left.property instanceof ast.PrimaryExpression) {
+                            const offset = structDef.offsets.get(node.left.property.name);
+                            if (offset !== undefined) {
+                                this.compileExpression(node.left.object);
+                                const offsetIdx = this.currentChunk().addConstant(offset);
+                                this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
+                                this.compileExpression(node.right);
+                                this.emitByte(OpCode.OP_SET_INDEX);
+                                return;
+                            }
+                        }
+                    }
+                }
+                // Fallback to dynamic property set (modules, etc)
+                this.compileExpression(node.left.object);
+                this.compileExpression(node.right);
+                if (node.left.property instanceof ast.PrimaryExpression && node.left.property.kind === "Identifier") {
+                    const nameIdx = this.currentChunk().addConstant(node.left.property.name);
+                    this.emitBytes(OpCode.OP_SET_PROPERTY, nameIdx);
+                }
             } else {
                 this.compileExpression(node.right);
                 if (node.left instanceof ast.PrimaryExpression && (node.left.kind === "Identifier" || node.left.kind === "Register")) {
@@ -244,6 +303,61 @@ export class Compiler {
             this.compileExpression(node.object);
             this.compileExpression(node.index);
             this.emitByte(OpCode.OP_GET_INDEX);
+        } else if (node instanceof ast.StructInitialization) {
+            const structDef = this.structs.get(node.name);
+            if (!structDef) throw new Error(`Unknown struct: ${node.name}`);
+            
+            const allocIdx = this.currentChunk().addConstant("__alloc");
+            this.emitBytes(OpCode.OP_GET_GLOBAL, allocIdx);
+            const sizeIdx = this.currentChunk().addConstant(structDef.size);
+            this.emitBytes(OpCode.OP_CONSTANT, sizeIdx);
+            this.emitBytes(OpCode.OP_CALL, 1);
+            
+            for (const field of node.fields) {
+                const offset = structDef.offsets.get(field.name);
+                if (offset === undefined) throw new Error(`Unknown field ${field.name}`);
+                
+                this.emitByte(OpCode.OP_DUP);
+                
+                const offsetIdx = this.currentChunk().addConstant(offset);
+                this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
+                
+                this.compileExpression(field.value);
+                
+                this.emitByte(OpCode.OP_SET_INDEX);
+                this.emitByte(OpCode.OP_POP);
+            }
+        } else if (node instanceof ast.MemberExpression) {
+            if (node.object instanceof ast.PrimaryExpression && (node.object.kind === "Identifier" || node.object.kind === "Register")) {
+                const localIdx = this.resolveLocal(node.object.name);
+                let typeName: string | undefined;
+                if (localIdx !== -1) {
+                    typeName = this.locals[localIdx]?.typeName;
+                } else {
+                    typeName = this.globalTypes.get(node.object.name);
+                }
+                
+                if (typeName) {
+                    const structDef = this.structs.get(typeName);
+                    if (structDef && node.property instanceof ast.PrimaryExpression) {
+                        const offset = structDef.offsets.get(node.property.name);
+                        if (offset !== undefined) {
+                            this.compileExpression(node.object);
+                            const offsetIdx = this.currentChunk().addConstant(offset);
+                            this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
+                            this.emitByte(OpCode.OP_GET_INDEX);
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // Fallback to dynamic property get
+            this.compileExpression(node.object);
+            if (node.property instanceof ast.PrimaryExpression && node.property.kind === "Identifier") {
+                const nameIdx = this.currentChunk().addConstant(node.property.name);
+                this.emitBytes(OpCode.OP_GET_PROPERTY, nameIdx);
+            }
         } else if (node instanceof ast.CallExpression) {
             // Builtin print hack for now
             if (node.callee instanceof ast.PrimaryExpression && node.callee.name === "print") {
@@ -259,12 +373,6 @@ export class Compiler {
                 this.compileExpression(arg);
             }
             this.emitBytes(OpCode.OP_CALL, node.args.length);
-        } else if (node instanceof ast.MemberExpression) {
-            this.compileExpression(node.object);
-            if (node.property instanceof ast.PrimaryExpression && node.property.kind === "Identifier") {
-                const nameIdx = this.currentChunk().addConstant(node.property.name);
-                this.emitBytes(OpCode.OP_GET_PROPERTY, nameIdx);
-            }
         } else if (node instanceof ast.ImportNode) {
             const nameIdx = this.currentChunk().addConstant(node.importPath);
             this.emitBytes(OpCode.OP_IMPORT, nameIdx);

@@ -21,7 +21,9 @@ export type NodeTypes =
   | "WhileExpression"
   | "IfExpression"
   | "ForExpression"
-  | "IndexExpression";
+  | "IndexExpression"
+  | "StructDeclaration"
+  | "StructInitialization";
 
 export type PrimaryExpressions =
   | "Literal"
@@ -258,6 +260,30 @@ export class IndexExpression extends Node {
     public object: Node,
     public index: Node,
     public typeAnnotation: Node | null = null,
+    location?: Location,
+  ) {
+    super(location);
+  }
+}
+
+export class StructDeclaration extends Node {
+  override readonly nodeName = "StructDeclaration";
+
+  constructor(
+    public name: string,
+    public fields: { name: string, type: Node | null }[],
+    location?: Location,
+  ) {
+    super(location);
+  }
+}
+
+export class StructInitialization extends Node {
+  override readonly nodeName = "StructInitialization";
+
+  constructor(
+    public name: string,
+    public fields: { name: string, value: Node }[],
     location?: Location,
   ) {
     super(location);

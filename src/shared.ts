@@ -8,7 +8,8 @@ export enum CompilerSymbols {
     while = "while",
     for = "for",
     if = "if",
-    else = "else"
+    else = "else",
+    struct = "struct"
 }
 
 export enum Literals {
