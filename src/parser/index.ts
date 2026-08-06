@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, type AST } from "../ast";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, type AST } from "../ast";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
@@ -502,7 +502,43 @@ export class Parser {
     }
 
     private parseForExpression(): Node {
-        throw new Error("Method not implemented.");
+        const forToken = this.previous()!;
+        this.consume("DELIMITER", `Expects "${Delimiters.LEFT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.LEFT_PAREN);
+        
+        let init: Node | null = null;
+        if (!this.check("DELIMITER") || this.peek()!.value !== Delimiters.SEMICOLON) {
+            init = this.parseExpression(); // This handles assignment / declaration
+        }
+        this.consume("DELIMITER", `Expects "${Delimiters.SEMICOLON}" after for init.`, Delimiters.SEMICOLON);
+        
+        let condition: Node | null = null;
+        if (!this.check("DELIMITER") || this.peek()!.value !== Delimiters.SEMICOLON) {
+            condition = this.parseExpression();
+        }
+        this.consume("DELIMITER", `Expects "${Delimiters.SEMICOLON}" after for condition.`, Delimiters.SEMICOLON);
+        
+        let increment: Node | null = null;
+        if (!this.check("DELIMITER") || this.peek()!.value !== Delimiters.RIGHT_PAREN) {
+            increment = this.parseExpression();
+        }
+        this.consume("DELIMITER", `Expects "${Delimiters.RIGHT_PAREN}" after for clauses.`, Delimiters.RIGHT_PAREN);
+
+        const pipeToken = this.peek()!;
+        let pipeValue: Node | null = null;
+
+        if (pipeToken && pipeToken.type === "DELIMITER" && pipeToken.value === Delimiters.PIPE) {
+            this.advance();
+            pipeValue = this.parsePrimary();
+            this.consume("DELIMITER", `Unexpected token "${this.peek()?.value}" expected "${Delimiters.PIPE}" instead.`, Delimiters.PIPE);
+        }
+
+        const body = this.parseBlock();
+
+        return new ForExpression(init, condition, increment, pipeValue, body, {
+            line: forToken.line,
+            column: forToken.column,
+            path: this.sourceFile?.name!
+        });
     }
 
 

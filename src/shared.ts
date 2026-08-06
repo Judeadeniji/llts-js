@@ -6,7 +6,7 @@ export enum CompilerSymbols {
     typeOf = "typeOf",
     func = "func",
     while = "while",
-    for = "switch",
+    for = "for",
     if = "if",
     else = "else"
 }

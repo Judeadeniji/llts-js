@@ -126,6 +126,39 @@ export class Compiler {
             
             this.patchJump(exitJump);
             this.emitByte(OpCode.OP_POP); // pop condition
+        } else if (node instanceof ast.ForExpression) {
+            this.beginScope(); // Scope for init variables
+            if (node.init) {
+                this.compileStatement(node.init);
+            }
+            
+            const loopStart = this.currentChunk().code.length;
+            
+            let exitJump = -1;
+            if (node.condition) {
+                this.compileExpression(node.condition);
+                exitJump = this.emitJump(OpCode.OP_JUMP_IF_FALSE);
+                this.emitByte(OpCode.OP_POP); // pop condition
+            }
+            
+            this.beginScope();
+            for (const stmt of node.body.statements) {
+                this.compileStatement(stmt);
+            }
+            this.endScope();
+            
+            if (node.increment) {
+                this.compileExpression(node.increment);
+                this.emitByte(OpCode.OP_POP);
+            }
+            
+            this.emitLoop(loopStart);
+            
+            if (exitJump !== -1) {
+                this.patchJump(exitJump);
+                this.emitByte(OpCode.OP_POP);
+            }
+            this.endScope(); // End init scope
         } else {
             // Expression statement
             this.compileExpression(node);

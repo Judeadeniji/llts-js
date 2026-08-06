@@ -1,0 +1,11 @@
+@const $std = @import("std");
+
+$sum = 0;
+
+@for ($i = 0; i < 5; i = i + 1) {
+    std.debug.printLn("i = {i}", i);
+    sum = sum + i;
+}
+
+std.debug.printLn("Sum is {i}", sum);
+std.debug.assert(sum == 10);
