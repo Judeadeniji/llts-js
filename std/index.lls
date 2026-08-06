@@ -1,0 +1,5 @@
+# Main entry point for the standard library
+
+$math = @import("std/math.lls");
+$debug = @import("std/debug.lls");
+$io = @import("std/io.lls");

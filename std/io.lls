@@ -1,0 +1,10 @@
+@func readLine() {
+    # Since we don't have built-in user input primitives yet, this is a placeholder.
+    # In a full implementation, it would read from stdin.
+    return "example input";
+}
+
+@func readFile(path) {
+    # Placeholder for reading a file
+    return "file content mock";
+}
