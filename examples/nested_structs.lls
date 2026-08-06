@@ -27,6 +27,8 @@ std.debug.printLn("Y: {i}", r.point.y);
 std.debug.assert(r.point.x == 5);
 std.debug.assert(r.point.y == 10);
 std.debug.assert(r.width == 100);
+std.debug.assert(r.name == "My Awesome Rect");
+std.debug.assert(r.name != "My Bad Rect");
 
 r.point.x = 99;
 std.debug.assert(r.point.x == 99);

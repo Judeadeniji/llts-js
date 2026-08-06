@@ -173,6 +173,35 @@ export class VM {
                     const aNeq = this.stack.pop();
                     this.stack.push(aNeq !== bNeq);
                     break;
+                case OpCode.OP_STRING_EQUAL:
+                case OpCode.OP_STRING_NOT_EQUAL: {
+                    const bPtr = this.stack.pop() as number;
+                    const aPtr = this.stack.pop() as number;
+                    
+                    const aLen = this.memory[aPtr + 1] as number;
+                    const bLen = this.memory[bPtr + 1] as number;
+                    
+                    let isEqual = true;
+                    if (aLen !== bLen) {
+                        isEqual = false;
+                    } else {
+                        const aCharPtr = this.memory[aPtr] as number;
+                        const bCharPtr = this.memory[bPtr] as number;
+                        for (let i = 0; i < aLen; i++) {
+                            if (this.memory[aCharPtr + i] !== this.memory[bCharPtr + i]) {
+                                isEqual = false;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (instruction === OpCode.OP_STRING_NOT_EQUAL) {
+                        this.stack.push(!isEqual);
+                    } else {
+                        this.stack.push(isEqual);
+                    }
+                    break;
+                }
                 case OpCode.OP_LESS:
                     const bLt = this.stack.pop() as number;
                     const aLt = this.stack.pop() as number;

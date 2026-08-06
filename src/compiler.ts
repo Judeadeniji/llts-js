@@ -316,8 +316,20 @@ export class Compiler {
                 case "/": this.emitByte(OpCode.OP_DIV); break;
                 case "%": this.emitByte(OpCode.OP_MOD); break;
                 case "**": this.emitByte(OpCode.OP_POW); break;
-                case "==": this.emitByte(OpCode.OP_EQUAL); break;
-                case "!=": this.emitByte(OpCode.OP_NOT_EQUAL); break;
+                case "==": 
+                    if (this.resolveType(node.left) === "string" && this.resolveType(node.right) === "string") {
+                        this.emitByte(OpCode.OP_STRING_EQUAL);
+                    } else {
+                        this.emitByte(OpCode.OP_EQUAL);
+                    }
+                    break;
+                case "!=": 
+                    if (this.resolveType(node.left) === "string" && this.resolveType(node.right) === "string") {
+                        this.emitByte(OpCode.OP_STRING_NOT_EQUAL);
+                    } else {
+                        this.emitByte(OpCode.OP_NOT_EQUAL);
+                    }
+                    break;
                 case "<": this.emitByte(OpCode.OP_LESS); break;
                 case "<=": this.emitByte(OpCode.OP_LESS_EQUAL); break;
                 case ">": this.emitByte(OpCode.OP_GREATER); break;
