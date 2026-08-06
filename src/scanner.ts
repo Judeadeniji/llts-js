@@ -74,6 +74,8 @@ export const Delimiters = {
     RIGHT_PAREN: ")",
     LEFT_BRACE: "{",
     RIGHT_BRACE: "}",
+    LEFT_BRACKET: "[",
+    RIGHT_BRACKET: "]",
     DOT: ".",
     PIPE: "|",
 } as const;

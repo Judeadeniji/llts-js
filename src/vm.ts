@@ -17,6 +17,8 @@ export class VM {
     private globals = new Map<string, Value>();
     private stack: Value[] = [];
     private frames: CallFrame[] = [];
+    private memory = new Float64Array(1024 * 1024);
+    private heapPointer = 0;
 
     constructor() {
         this.defineNative("print", (args: Value[]) => {
@@ -34,11 +36,22 @@ export class VM {
             console.log(msg);
             return null;
         });
+
+        this.defineNative("__alloc", (args: Value[]) => {
+            const size = args[0] as number;
+            const ptr = this.heapPointer;
+            this.heapPointer += size;
+            return ptr;
+        });
     }
     
     private defineNative(name: string, func: (...args: Value[]) => Value | Value[]) {
         this.globals.set(name, new NativeFunction(name, func, 0)); // arity ignored for natives
     }
+
+    private push(val: Value) { this.stack.push(val); }
+    private pop() { return this.stack.pop(); }
+    private peek(dist: number) { return this.stack[this.stack.length - 1 - dist]; }
 
     public run(document: ast.DocumentBody) {
         const compiler = new Compiler();
@@ -78,12 +91,26 @@ export class VM {
                     break;
                 case OpCode.OP_GET_LOCAL:
                     const localSlot = readByte();
-                    this.stack.push(this.stack[frame.baseSlot + localSlot]);
+                    this.push(this.stack[frame.baseSlot + localSlot]);
                     break;
                 case OpCode.OP_SET_LOCAL:
                     const setLocalSlot = readByte();
-                    this.stack[frame.baseSlot + setLocalSlot] = this.stack[this.stack.length - 1];
+                    this.stack[frame.baseSlot + setLocalSlot] = this.peek(0);
                     break;
+                case OpCode.OP_GET_INDEX: {
+                    const index = this.pop() as number;
+                    const ptr = this.pop() as number;
+                    this.push(this.memory[ptr + index]);
+                    break;
+                }
+                case OpCode.OP_SET_INDEX: {
+                    const value = this.pop() as number;
+                    const index = this.pop() as number;
+                    const ptr = this.pop() as number;
+                    this.memory[ptr + index] = value;
+                    this.push(value);
+                    break;
+                }
                 case OpCode.OP_GET_GLOBAL:
                     const globalName = readConstant() as string;
                     if (!this.globals.has(globalName)) {

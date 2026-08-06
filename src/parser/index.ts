@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, type AST } from "../ast";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, type AST } from "../ast";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
@@ -208,6 +208,14 @@ export class Parser {
                     null,
                     expr.loc
                 );
+                continue;
+            }
+
+            if (tok?.type === "DELIMITER" && tok.value === Delimiters.LEFT_BRACKET) {
+                this.advance();
+                const indexExpr = this.parseExpression();
+                this.consume("DELIMITER", "Expected ']'", Delimiters.RIGHT_BRACKET);
+                expr = new IndexExpression(expr, indexExpr, null, expr.loc);
                 continue;
             }
 

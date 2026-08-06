@@ -1,0 +1,3 @@
+@func alloc(size) {
+    return __alloc(size);
+}

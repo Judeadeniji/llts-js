@@ -180,14 +180,21 @@ export class Compiler {
                 this.resolveVariable(node.name);
             }
         } else if (node instanceof ast.AssignmentExpression) {
-            this.compileExpression(node.right);
-            if (node.left instanceof ast.PrimaryExpression && (node.left.kind === "Identifier" || node.left.kind === "Register")) {
-                const arg = this.resolveLocal(node.left.name);
-                if (arg !== -1) {
-                    this.emitBytes(OpCode.OP_SET_LOCAL, arg);
-                } else {
-                    const nameIdx = this.currentChunk().addConstant(node.left.name);
-                    this.emitBytes(OpCode.OP_SET_GLOBAL, nameIdx);
+            if (node.left instanceof ast.IndexExpression) {
+                this.compileExpression(node.left.object);
+                this.compileExpression(node.left.index);
+                this.compileExpression(node.right);
+                this.emitByte(OpCode.OP_SET_INDEX);
+            } else {
+                this.compileExpression(node.right);
+                if (node.left instanceof ast.PrimaryExpression && (node.left.kind === "Identifier" || node.left.kind === "Register")) {
+                    const arg = this.resolveLocal(node.left.name);
+                    if (arg !== -1) {
+                        this.emitBytes(OpCode.OP_SET_LOCAL, arg);
+                    } else {
+                        const nameIdx = this.currentChunk().addConstant(node.left.name);
+                        this.emitBytes(OpCode.OP_SET_GLOBAL, nameIdx);
+                    }
                 }
             }
         } else if (node instanceof ast.BinaryExpression) {
@@ -233,6 +240,10 @@ export class Compiler {
                 case "-": this.emitByte(OpCode.OP_NEGATE); break;
                 case "!": this.emitByte(OpCode.OP_NOT); break;
             }
+        } else if (node instanceof ast.IndexExpression) {
+            this.compileExpression(node.object);
+            this.compileExpression(node.index);
+            this.emitByte(OpCode.OP_GET_INDEX);
         } else if (node instanceof ast.CallExpression) {
             // Builtin print hack for now
             if (node.callee instanceof ast.PrimaryExpression && node.callee.name === "print") {

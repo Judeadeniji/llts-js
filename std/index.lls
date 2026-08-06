@@ -3,3 +3,4 @@
 $math = @import("std/math.lls");
 $debug = @import("std/debug.lls");
 $io = @import("std/io.lls");
+$mem = @import("std/mem.lls");

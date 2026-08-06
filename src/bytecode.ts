@@ -30,6 +30,10 @@ export enum OpCode {
     OP_SET_LOCAL,     // [OP, stack_index]
     OP_GET_LOCAL,     // [OP, stack_index]
     
+    // Arrays and Memory
+    OP_GET_INDEX,
+    OP_SET_INDEX,
+    
     // Control Flow
     OP_JUMP,          // [OP, offset1, offset2]
     OP_JUMP_IF_FALSE, // [OP, offset1, offset2]
