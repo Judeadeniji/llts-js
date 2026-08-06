@@ -47,7 +47,8 @@ export enum OpCode {
     // Objects/Modules
     OP_IMPORT,        // [OP, const_index_of_path]
     OP_GET_PROPERTY,  // [OP, const_index_of_name]
-    
+    OP_SET_PROPERTY,  // [OP, const_index_of_name]
+
     // Builtins
     OP_PRINT,         // [OP, arg_count] (for simplicity)
     
