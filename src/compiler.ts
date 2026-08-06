@@ -26,8 +26,10 @@ export class Compiler {
     
     private resolveType(node: ast.Node): string | undefined {
         if (node instanceof ast.LiteralExpression) {
-            if (typeof node.value === "string") {
+            if (node.literal_type === "string") {
                 return "string";
+            } else if (node.literal_type === "boolean") {
+                return "boolean";
             }
             return "int"; // Assume number is int for now
         }
@@ -260,7 +262,14 @@ export class Compiler {
                     const structDef = this.structs.get(typeName);
                     if (structDef && node.left.property instanceof ast.PrimaryExpression) {
                         const offset = structDef.offsets.get(node.left.property.name);
+                        const expectedType = structDef.types.get(node.left.property.name);
+                        
                         if (offset !== undefined) {
+                            const assignedType = this.resolveType(node.right);
+                            if (expectedType && assignedType && expectedType !== assignedType) {
+                                throw new Error(`Type mismatch: cannot assign type '${assignedType}' to field '${node.left.property.name}' of type '${expectedType}'`);
+                            }
+                            
                             this.compileExpression(node.left.object);
                             const offsetIdx = this.currentChunk().addConstant(offset);
                             this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
@@ -360,7 +369,14 @@ export class Compiler {
             
             for (const field of node.fields) {
                 const offset = structDef.offsets.get(field.name);
+                const expectedType = structDef.types.get(field.name);
+                
                 if (offset === undefined) throw new Error(`Unknown field ${field.name}`);
+                
+                const assignedType = this.resolveType(field.value);
+                if (expectedType && assignedType && expectedType !== assignedType) {
+                    throw new Error(`Type mismatch in struct initialization: cannot assign type '${assignedType}' to field '${field.name}' of type '${expectedType}'`);
+                }
                 
                 this.emitByte(OpCode.OP_DUP);
                 
