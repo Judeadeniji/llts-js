@@ -17,7 +17,7 @@ export class VM {
     private globals = new Map<string, Value>();
     private stack: Value[] = [];
     private frames: CallFrame[] = [];
-    private memory = new Float64Array(1024 * 1024);
+    private memory: Value[] = new Array(1024 * 1024).fill(null);
     private heapPointer = 0;
 
     constructor() {

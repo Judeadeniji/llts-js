@@ -10,6 +10,7 @@ interface StructDef {
     name: string;
     size: number;
     offsets: Map<string, number>;
+    types: Map<string, string>;
 }
 
 export class Compiler {
@@ -19,6 +20,25 @@ export class Compiler {
     private functions: ast.FunctionDeclaration[] = [];
     private structs: Map<string, StructDef> = new Map();
     private globalTypes: Map<string, string> = new Map();
+    
+    private resolveType(node: ast.Node): string | undefined {
+        if (node instanceof ast.PrimaryExpression && (node.kind === "Identifier" || node.kind === "Register")) {
+            const localIdx = this.resolveLocal(node.name);
+            if (localIdx !== -1) {
+                return this.locals[localIdx]?.typeName;
+            }
+            return this.globalTypes.get(node.name);
+        } else if (node instanceof ast.MemberExpression) {
+            const objectType = this.resolveType(node.object);
+            if (objectType && node.property instanceof ast.PrimaryExpression && node.property.kind === "Identifier") {
+                const structDef = this.structs.get(objectType);
+                if (structDef) {
+                    return structDef.types.get(node.property.name);
+                }
+            }
+        }
+        return undefined;
+    }
     
     constructor() {
         // Start with a top-level script chunk
@@ -95,11 +115,15 @@ export class Compiler {
             this.emitByte(OpCode.OP_RETURN);
         } else if (node instanceof ast.StructDeclaration) {
             const offsets = new Map<string, number>();
+            const types = new Map<string, string>();
             let size = 0;
             for (const field of node.fields) {
                 offsets.set(field.name, size++);
+                if (field.type instanceof ast.PrimaryExpression && field.type.kind === "Identifier") {
+                    types.set(field.name, field.type.name);
+                }
             }
-            this.structs.set(node.name, { name: node.name, size, offsets });
+            this.structs.set(node.name, { name: node.name, size, offsets, types });
         } else if (node instanceof ast.IfExpression) {
             this.compileExpression(node.condition);
             
@@ -213,27 +237,18 @@ export class Compiler {
                 this.compileExpression(node.right);
                 this.emitByte(OpCode.OP_SET_INDEX);
             } else if (node.left instanceof ast.MemberExpression) {
-                if (node.left.object instanceof ast.PrimaryExpression && (node.left.object.kind === "Identifier" || node.left.object.kind === "Register")) {
-                    const localIdx = this.resolveLocal(node.left.object.name);
-                    let typeName: string | undefined;
-                    if (localIdx !== -1) {
-                        typeName = this.locals[localIdx]?.typeName;
-                    } else {
-                        typeName = this.globalTypes.get(node.left.object.name);
-                    }
-                    
-                    if (typeName) {
-                        const structDef = this.structs.get(typeName);
-                        if (structDef && node.left.property instanceof ast.PrimaryExpression) {
-                            const offset = structDef.offsets.get(node.left.property.name);
-                            if (offset !== undefined) {
-                                this.compileExpression(node.left.object);
-                                const offsetIdx = this.currentChunk().addConstant(offset);
-                                this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
-                                this.compileExpression(node.right);
-                                this.emitByte(OpCode.OP_SET_INDEX);
-                                return;
-                            }
+                const typeName = this.resolveType(node.left.object);
+                if (typeName) {
+                    const structDef = this.structs.get(typeName);
+                    if (structDef && node.left.property instanceof ast.PrimaryExpression) {
+                        const offset = structDef.offsets.get(node.left.property.name);
+                        if (offset !== undefined) {
+                            this.compileExpression(node.left.object);
+                            const offsetIdx = this.currentChunk().addConstant(offset);
+                            this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
+                            this.compileExpression(node.right);
+                            this.emitByte(OpCode.OP_SET_INDEX);
+                            return;
                         }
                     }
                 }
@@ -328,26 +343,17 @@ export class Compiler {
                 this.emitByte(OpCode.OP_POP);
             }
         } else if (node instanceof ast.MemberExpression) {
-            if (node.object instanceof ast.PrimaryExpression && (node.object.kind === "Identifier" || node.object.kind === "Register")) {
-                const localIdx = this.resolveLocal(node.object.name);
-                let typeName: string | undefined;
-                if (localIdx !== -1) {
-                    typeName = this.locals[localIdx]?.typeName;
-                } else {
-                    typeName = this.globalTypes.get(node.object.name);
-                }
-                
-                if (typeName) {
-                    const structDef = this.structs.get(typeName);
-                    if (structDef && node.property instanceof ast.PrimaryExpression) {
-                        const offset = structDef.offsets.get(node.property.name);
-                        if (offset !== undefined) {
-                            this.compileExpression(node.object);
-                            const offsetIdx = this.currentChunk().addConstant(offset);
-                            this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
-                            this.emitByte(OpCode.OP_GET_INDEX);
-                            return;
-                        }
+            const typeName = this.resolveType(node.object);
+            if (typeName) {
+                const structDef = this.structs.get(typeName);
+                if (structDef && node.property instanceof ast.PrimaryExpression) {
+                    const offset = structDef.offsets.get(node.property.name);
+                    if (offset !== undefined) {
+                        this.compileExpression(node.object);
+                        const offsetIdx = this.currentChunk().addConstant(offset);
+                        this.emitBytes(OpCode.OP_CONSTANT, offsetIdx);
+                        this.emitByte(OpCode.OP_GET_INDEX);
+                        return;
                     }
                 }
             }
