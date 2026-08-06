@@ -34,11 +34,22 @@ export class Compiler {
             return "int"; // Assume number is int for now
         }
         if (node instanceof ast.PrimaryExpression && (node.kind === "Identifier" || node.kind === "Register")) {
+            let typeName: string | undefined;
             const localIdx = this.resolveLocal(node.name);
             if (localIdx !== -1) {
-                return this.locals[localIdx]?.typeName;
+                typeName = this.locals[localIdx]?.typeName;
+            } else {
+                typeName = this.globalTypes.get(node.name);
             }
-            return this.globalTypes.get(node.name);
+            
+            if (typeName && typeName.includes(".")) {
+                const parts = typeName.split(".");
+                const modulePath = this.globalTypes.get("$" + parts[0]);
+                if (modulePath && modulePath.startsWith("module:")) {
+                    typeName = modulePath.replace("module:", "") + "::" + parts[1];
+                }
+            }
+            return typeName;
         } else if (node instanceof ast.MemberExpression) {
             const objectType = this.resolveType(node.object);
             if (objectType && node.property instanceof ast.PrimaryExpression && node.property.kind === "Identifier") {
@@ -105,6 +116,8 @@ export class Compiler {
             let typeName: string | undefined;
             if (node.value instanceof ast.StructInitialization) {
                 typeName = node.value.name;
+            } else if (node.value instanceof ast.ImportNode) {
+                this.globalTypes.set("$" + node.name, `module:${node.value.importPath}`);
             }
 
             if (this.scopeDepth > 0) {
@@ -358,8 +371,17 @@ export class Compiler {
             this.compileExpression(node.index);
             this.emitByte(OpCode.OP_GET_INDEX);
         } else if (node instanceof ast.StructInitialization) {
-            const structDef = this.structs.get(node.name);
-            if (!structDef) throw new Error(`Unknown struct: ${node.name}`);
+            let structName = node.name;
+            if (structName.includes(".")) {
+                const parts = structName.split(".");
+                const modulePath = this.globalTypes.get("$" + parts[0]);
+                if (modulePath && modulePath.startsWith("module:")) {
+                    structName = modulePath.replace("module:", "") + "::" + parts[1];
+                }
+            }
+            
+            const structDef = this.structs.get(structName);
+            if (!structDef) throw new Error(`Unknown struct: ${structName} (original: ${node.name})`);
             
             const allocIdx = this.currentChunk().addConstant("__alloc");
             this.emitBytes(OpCode.OP_GET_GLOBAL, allocIdx);
@@ -389,8 +411,16 @@ export class Compiler {
                 this.emitByte(OpCode.OP_POP);
             }
         } else if (node instanceof ast.MemberExpression) {
-            const typeName = this.resolveType(node.object);
+            let typeName = this.resolveType(node.object);
             if (typeName) {
+                if (typeName.includes(".")) {
+                    const parts = typeName.split(".");
+                    const modulePath = this.globalTypes.get("$" + parts[0]);
+                    if (modulePath && modulePath.startsWith("module:")) {
+                        typeName = modulePath.replace("module:", "") + "::" + parts[1];
+                    }
+                }
+                
                 const structDef = this.structs.get(typeName);
                 if (structDef && node.property instanceof ast.PrimaryExpression) {
                     const offset = structDef.offsets.get(node.property.name);
@@ -438,12 +468,20 @@ export class Compiler {
                 const parser = new Parser();
                 const doc = parser.parse(source, fullPath);
                 for (const stmt of doc.statements) {
-                    if (stmt instanceof ast.StructDeclaration || stmt instanceof ast.ImportNode) {
-                        // Recursively compile declarations and nested imports to hoist structs
-                        // We do this by temporarily disabling bytecode emission
+                    if (stmt instanceof ast.StructDeclaration) {
+                        if (stmt.isPublic) {
+                            const origName = stmt.name;
+                            stmt.name = `${node.importPath}::${origName}`;
+                            
+                            const currentSize = this.currentChunk().code.length;
+                            this.compileStatement(stmt);
+                            this.currentChunk().code.length = currentSize;
+                            
+                            stmt.name = origName; // restore
+                        }
+                    } else if (stmt instanceof ast.ImportNode) {
                         const currentSize = this.currentChunk().code.length;
                         this.compileStatement(stmt);
-                        // Revert bytecode emission since we only want to extract types
                         this.currentChunk().code.length = currentSize;
                     }
                 }

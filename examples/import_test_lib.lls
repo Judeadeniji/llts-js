@@ -1,5 +1,9 @@
-@struct Vector3 {
+pub @struct Vector3 {
     x: int;
     y: int;
     z: int;
+}
+
+@struct PrivateVector {
+    x: int;
 }

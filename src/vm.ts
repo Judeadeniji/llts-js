@@ -21,12 +21,12 @@ export class VM {
     private heapPointer = 0;
 
     constructor() {
-        this.defineNative("print", (args: Value[]) => {
+        this.defineNative("print", (...args: Value[]) => {
             console.log(...args);
             return null;
         });
 
-        this.defineNative("__printLn", (args: Value[]) => {
+        this.defineNative("__printLn", (...args: Value[]) => {
             const ptr = args[0] as number;
             const charPtr = this.memory[ptr] as number;
             const len = this.memory[ptr + 1] as number;
@@ -55,7 +55,7 @@ export class VM {
             return null;
         });
 
-        this.defineNative("__alloc", (args: Value[]) => {
+        this.defineNative("__alloc", (...args: Value[]) => {
             const size = args[0] as number;
             const ptr = this.heapPointer;
             this.heapPointer += size;
@@ -69,7 +69,7 @@ export class VM {
 
     private push(val: Value) { this.stack.push(val); }
     private pop() { return this.stack.pop(); }
-    private peek(dist: number) { return this.stack[this.stack.length - 1 - dist]; }
+    private peek(dist: number) { return this.stack[this.stack.length - 1 - dist]!; }
 
     public run(document: ast.DocumentBody) {
         const compiler = new Compiler();
@@ -127,7 +127,7 @@ export class VM {
                 }
                 case OpCode.OP_GET_LOCAL:
                     const localSlot = readByte();
-                    this.push(this.stack[frame.baseSlot + localSlot]);
+                    this.push(this.stack[frame.baseSlot + localSlot]!);
                     break;
                 case OpCode.OP_SET_LOCAL:
                     const setLocalSlot = readByte();
@@ -136,7 +136,7 @@ export class VM {
                 case OpCode.OP_GET_INDEX: {
                     const index = this.pop() as number;
                     const ptr = this.pop() as number;
-                    this.push(this.memory[ptr + index]);
+                    this.push(this.memory[ptr + index]!);
                     break;
                 }
                 case OpCode.OP_SET_INDEX: {
@@ -156,7 +156,7 @@ export class VM {
                     break;
                 case OpCode.OP_SET_GLOBAL:
                     const setGlobalName = readConstant() as string;
-                    this.globals.set(setGlobalName, this.stack[this.stack.length - 1]);
+                    this.globals.set(setGlobalName, this.stack[this.stack.length - 1]!);
                     break;
                 case OpCode.OP_GET_PROPERTY:
                     const propName = readConstant() as string;
@@ -277,7 +277,7 @@ export class VM {
                     break;
                 case OpCode.OP_CALL:
                     const argCount = readByte();
-                    this.callValue(this.stack[this.stack.length - 1 - argCount], argCount);
+                    this.callValue(this.stack[this.stack.length - 1 - argCount]!, argCount);
                     break;
                 case OpCode.OP_PRINT:
                     const pArgCount = readByte();
@@ -342,7 +342,7 @@ export class VM {
                 args.push(this.stack.pop());
             }
             args.reverse();
-            const result = callee.func(args);
+            const result = callee.func(...args);
             this.stack.pop(); // pop native function
             this.stack.push(result);
             return;

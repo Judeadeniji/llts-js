@@ -101,6 +101,14 @@ export class Parser {
                 return this.parseExpressionStatement();
 
             case "KEYWORD":
+                if (token.value === "pub") {
+                    this.advance();
+                    const stmt = this.parseStatement();
+                    if (stmt instanceof StructDeclaration || stmt instanceof FunctionDeclaration) {
+                        stmt.isPublic = true;
+                    }
+                    return stmt;
+                }
                 if (token.value === "return") return this.parseReturnStatement();
                 if (token.value === "true" || token.value === "false") return this.parseExpressionStatement();
 
@@ -219,10 +227,46 @@ export class Parser {
                 continue;
             }
 
+            if (tok?.type === "DELIMITER" && tok.value === Delimiters.LEFT_BRACE) {
+                if (expr instanceof PrimaryExpression || expr instanceof MemberExpression) {
+                    this.advance(); // consume '{'
+                    const fields: { name: string, value: Node }[] = [];
+                    
+                    while (!this.check("EOF") && !(this.check("DELIMITER") && this.peek()!.value === Delimiters.RIGHT_BRACE)) {
+                        const fieldName = this.consume("IDENTIFIER", "Expected field name in struct initialization")!;
+                        this.consume("DELIMITER", "Expected ':' after field name", Delimiters.COLON);
+                        const fieldValue = this.parseExpression();
+                        fields.push({ name: fieldName.value, value: fieldValue });
+                        
+                        if (this.check("DELIMITER") && this.peek()!.value === Delimiters.COMMA) {
+                            this.advance(); // consume ','
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    this.consume("DELIMITER", "Expected '}' after struct initialization", Delimiters.RIGHT_BRACE);
+                    
+                    expr = new StructInitialization(this.exprToString(expr), fields, {
+                        column: tok.column,
+                        line: tok.line,
+                        path: this.sourceFile?.name!
+                    });
+                    continue;
+                }
+            }
+
             break;
         }
 
         return expr;
+    }
+    
+    private exprToString(expr: Node): string {
+        if (expr instanceof PrimaryExpression) return expr.name;
+        if (expr instanceof MemberExpression && expr.property instanceof PrimaryExpression) return this.exprToString(expr.object) + "." + expr.property.name;
+        reportError(this.sourceFile?.name!, this.source, expr.loc?.line!, expr.loc?.column!, "Invalid struct name expression");
+        process.exit(1);
     }
 
     private finishCall(callee: Node): Node {
@@ -260,34 +304,6 @@ export class Parser {
 
             case "IDENTIFIER": {
                 this.advance();
-                
-                // Check if this is a struct initialization like Point { x: 1, y: 2 }
-                if (this.check("DELIMITER") && this.peek()!.value === Delimiters.LEFT_BRACE) {
-                    this.advance(); // consume '{'
-                    const fields: { name: string, value: Node }[] = [];
-                    
-                    while (!this.check("EOF") && !(this.check("DELIMITER") && this.peek()!.value === Delimiters.RIGHT_BRACE)) {
-                        const fieldName = this.consume("IDENTIFIER", "Expected field name in struct initialization")!;
-                        this.consume("DELIMITER", "Expected ':' after field name", Delimiters.COLON);
-                        const fieldValue = this.parseExpression();
-                        fields.push({ name: fieldName.value, value: fieldValue });
-                        
-                        if (this.check("DELIMITER") && this.peek()!.value === Delimiters.COMMA) {
-                            this.advance(); // consume ','
-                        } else {
-                            break;
-                        }
-                    }
-                    
-                    this.consume("DELIMITER", "Expected '}' after struct initialization", Delimiters.RIGHT_BRACE);
-                    
-                    return new StructInitialization(token.value, fields, {
-                        column: token.column,
-                        line: token.line,
-                        path: this.sourceFile?.name!
-                    });
-                }
-                
                 return new PrimaryExpression("Identifier", token.value, null, {
                     column: token.column,
                     line: token.line,

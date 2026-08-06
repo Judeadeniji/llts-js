@@ -63,7 +63,8 @@ export class CompilerKeywordToken extends Token {
 export enum Keywords {
     true = "true",
     false = "false",
-    return = "return"
+    return = "return",
+    pub = "pub"
 }
 
 export const Delimiters = {

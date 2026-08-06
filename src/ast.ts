@@ -114,6 +114,7 @@ export class MemberExpression extends Node {
 
 export class FunctionDeclaration extends Node {
   override readonly nodeName = "FunctionDeclaration";
+  public isPublic = false;
 
   constructor(
     public name: string,
@@ -268,6 +269,7 @@ export class IndexExpression extends Node {
 
 export class StructDeclaration extends Node {
   override readonly nodeName = "StructDeclaration";
+  public isPublic = false;
 
   constructor(
     public name: string,
