@@ -1,0 +1,5 @@
+@struct Vector3 {
+    x: int;
+    y: int;
+    z: int;
+}

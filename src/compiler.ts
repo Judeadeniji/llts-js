@@ -1,5 +1,8 @@
 import * as ast from "./ast";
 import { Chunk, FunctionObj, OpCode } from "./bytecode";
+import * as fs from "fs";
+import * as path from "path";
+import { Parser } from "./parser";
 
 class Local {
     public typeName?: string;
@@ -407,6 +410,29 @@ export class Compiler {
             }
             this.emitBytes(OpCode.OP_CALL, node.args.length);
         } else if (node instanceof ast.ImportNode) {
+            let importPath = node.importPath;
+            if (importPath === "std") {
+                importPath = "std/index.lls";
+            } else if (!importPath.endsWith(".lls")) {
+                importPath += ".lls";
+            }
+            const fullPath = path.resolve(process.cwd(), importPath);
+            if (fs.existsSync(fullPath)) {
+                const source = fs.readFileSync(fullPath, "utf-8");
+                const parser = new Parser();
+                const doc = parser.parse(source, fullPath);
+                for (const stmt of doc.statements) {
+                    if (stmt instanceof ast.StructDeclaration || stmt instanceof ast.ImportNode) {
+                        // Recursively compile declarations and nested imports to hoist structs
+                        // We do this by temporarily disabling bytecode emission
+                        const currentSize = this.currentChunk().code.length;
+                        this.compileStatement(stmt);
+                        // Revert bytecode emission since we only want to extract types
+                        this.currentChunk().code.length = currentSize;
+                    }
+                }
+            }
+
             const nameIdx = this.currentChunk().addConstant(node.importPath);
             this.emitBytes(OpCode.OP_IMPORT, nameIdx);
         }
