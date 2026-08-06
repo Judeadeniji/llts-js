@@ -121,7 +121,6 @@ export class Parser {
 
     private parseExpressionStatement(): Node {
         const expr = this.parseExpression();
-        console.log(expr)
         this.consume(
             "DELIMITER",
             `Expected ';' after expression, found "${this.peek()!.value}" instead`,
@@ -153,7 +152,6 @@ export class Parser {
 
         while (true) {
             const tok = this.peek();
-            console.log({tok})
             if (!tok || tok.type !== "BIN_OP") break;
 
             const prec = PRECEDENCE[tok.value];
@@ -227,16 +225,15 @@ export class Parser {
         if (!(this.peek()!.type === "DELIMITER" && this.peek()!.value === Delimiters.RIGHT_PAREN)) {
             do {
                 args.push(this.parseExpression());
-            } while (
-                this.match("DELIMITER") &&
-                this.previous()!.value === ","
-            );
+                if (this.check("DELIMITER") && this.peek()!.value === ",") {
+                    this.advance(); // consume ","
+                } else {
+                    break;
+                }
+            } while (true);
         }
 
-        const next = this.peek()!;
-        if (next.type === "DELIMITER" && next.value === Delimiters.RIGHT_PAREN) {
-            this.advance();
-        }
+        this.consume("DELIMITER", "Expected ')'", Delimiters.RIGHT_PAREN);
 
         return new CallExpression(callee, args, null, callee.loc);
     }
@@ -524,8 +521,6 @@ export class Parser {
                 reportError(this.sourceFile?.name!, this.source, typeName!.line, typeName!.column, `Expected a valid type name instead.`);
                 process.exit(1);
             }
-
-            console.log({ typeName: typeName.value });
         }
 
 

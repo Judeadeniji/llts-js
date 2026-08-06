@@ -50,15 +50,8 @@ export enum AssignOps {
     divAssign = "/=",
     modAssign = "%=",
     powAssign = "^=",
-    eqAssign = "==",
-    neqAssign = "!=",
-    gtAssign = ">=",
-    gteAssign = ">=",
-    ltAssign = "<=",
-    lteAssign = "<=",
     andAssign = "&&=",
-    orAssign = "||=",
-    notAssign = "!=",
+    orAssign = "||="
 }
 
 // TODO: ADD BITWISE OPERATORS
