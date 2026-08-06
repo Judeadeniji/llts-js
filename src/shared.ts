@@ -7,6 +7,8 @@ export enum CompilerSymbols {
     func = "func",
     while = "while",
     for = "switch",
+    if = "if",
+    else = "else"
 }
 
 export enum Literals {

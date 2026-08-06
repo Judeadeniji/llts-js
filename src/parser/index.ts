@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, type AST } from "../ast";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, type AST } from "../ast";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 
 export class Parser {
@@ -431,7 +431,45 @@ export class Parser {
                 return this.parseWhileExpression();
             case CompilerSymbols.for:
                 return this.parseForExpression();
+            case CompilerSymbols.if:
+                return this.parseIfExpression();
         }
+        throw new Error(`Unhandled compiler keyword: ${keyword.value}`);
+    }
+
+    private parseIfExpression(): Node {
+        const ifToken = this.previous()!;
+        this.consume("DELIMITER", `Expects "${Delimiters.LEFT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.LEFT_PAREN);
+        const cond = this.parseExpression();
+        this.consume("DELIMITER", `Expects "${Delimiters.RIGHT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.RIGHT_PAREN);
+
+        const pipeToken = this.peek()!;
+        let pipeValue: Node | null = null;
+
+        if (pipeToken && pipeToken.type === "DELIMITER" && pipeToken.value === Delimiters.PIPE) {
+            this.advance();
+            pipeValue = this.parsePrimary();
+            this.consume("DELIMITER", `Unexpected token "${this.peek()?.value}" expected "${Delimiters.PIPE}" instead.`, Delimiters.PIPE);
+        }
+
+        const body = this.parseBlock();
+        let elseBody: Node | null = null;
+
+        // Check for @else
+        if (this.match("COMPILER_KEYWORD") && this.previous()?.value === CompilerSymbols.else) {
+            // It could be @else @if ... or just @else { ... }
+            if (this.match("COMPILER_KEYWORD") && this.previous()?.value === CompilerSymbols.if) {
+                elseBody = this.parseIfExpression();
+            } else {
+                elseBody = this.parseBlock();
+            }
+        }
+
+        return new IfExpression(cond, pipeValue, body, elseBody, {
+            line: ifToken.line,
+            column: ifToken.column,
+            path: this.sourceFile?.name!
+        });
     }
 
     private parseWhileExpression(): Node {

@@ -73,6 +73,38 @@ export class Compiler {
                 this.emitByte(OpCode.OP_NULL);
             }
             this.emitByte(OpCode.OP_RETURN);
+        } else if (node instanceof ast.IfExpression) {
+            this.compileExpression(node.condition);
+            
+            const thenJump = this.emitJump(OpCode.OP_JUMP_IF_FALSE);
+            this.emitByte(OpCode.OP_POP); // pop condition
+            
+            this.beginScope();
+            // TODO: pipeValue binding for `|item|` if present
+            for (const stmt of node.body.statements) {
+                this.compileStatement(stmt);
+            }
+            this.endScope();
+            
+            if (node.elseBody) {
+                const elseJump = this.emitJump(OpCode.OP_JUMP);
+                this.patchJump(thenJump);
+                this.emitByte(OpCode.OP_POP); // pop condition from false path
+                
+                if (node.elseBody instanceof ast.BlockExpression) {
+                    this.beginScope();
+                    for (const stmt of node.elseBody.statements) {
+                        this.compileStatement(stmt);
+                    }
+                    this.endScope();
+                } else if (node.elseBody instanceof ast.IfExpression) {
+                    this.compileStatement(node.elseBody);
+                }
+                this.patchJump(elseJump);
+            } else {
+                this.patchJump(thenJump);
+                this.emitByte(OpCode.OP_POP); // pop condition from false path
+            }
         } else if (node instanceof ast.WhileExpression) {
             const loopStart = this.currentChunk().code.length;
             
