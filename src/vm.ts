@@ -339,7 +339,7 @@ export class VM {
         if (callee instanceof NativeFunction) {
             const args = [];
             for (let i = 0; i < argCount; i++) {
-                args.push(this.stack.pop());
+                args.push(this.stack.pop()!);
             }
             args.reverse();
             const result = callee.func(...args);

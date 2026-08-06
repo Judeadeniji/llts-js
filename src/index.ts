@@ -69,13 +69,18 @@ function executeCommands(cmds: { c: string; v: string | undefined }[]) {
 }
 
 async function parseInput(path: string) {
-    const parser = new Parser();
+    try {
+        const parser = new Parser();
 
-    const result = await parser.parseFile(path);
-    // console.dir(result.parsed, {
-    //     depth: Number.POSITIVE_INFINITY
-    // });
+        const result = await parser.parseFile(path);
+        // console.dir(result.parsed, {
+        //     depth: Number.POSITIVE_INFINITY
+        // });
 
-    const vm = new VM();
-    vm.run(result.parsed);
+        const vm = new VM();
+        vm.run(result.parsed);
+    } catch (e) {
+        console.error(e);
+        process.exit(1);
+    }
 }

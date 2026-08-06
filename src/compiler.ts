@@ -330,6 +330,21 @@ export class Compiler {
                 this.patchJump(endJump);
                 return;
             }
+            if (node.operator === "|>") {
+                if (node.right instanceof ast.CallExpression) {
+                    this.compileExpression(node.right.callee);
+                    this.compileExpression(node.left);
+                    for (const arg of node.right.args) {
+                        this.compileExpression(arg);
+                    }
+                    this.emitBytes(OpCode.OP_CALL, node.right.args.length + 1);
+                } else {
+                    this.compileExpression(node.right);
+                    this.compileExpression(node.left);
+                    this.emitBytes(OpCode.OP_CALL, 1);
+                }
+                return;
+            }
             
             this.compileExpression(node.left);
             this.compileExpression(node.right);
