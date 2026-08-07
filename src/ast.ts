@@ -219,7 +219,19 @@ export class ReturnExpression extends Node {
     super(location);
   }
 }
+export class BreakExpression extends Node {
+  override readonly nodeName = "BreakExpression";
+  constructor(override parent: Node | null = null, location?: Location) {
+    super(location);
+  }
+}
 
+export class ContinueExpression extends Node {
+  override readonly nodeName = "ContinueExpression";
+  constructor(override parent: Node | null = null, location?: Location) {
+    super(location);
+  }
+}
 
 export class WhileExpression extends Node {
   override readonly nodeName = "WhileExpression";

@@ -67,7 +67,9 @@ export enum Keywords {
     true = "true",
     false = "false",
     return = "return",
-    pub = "pub"
+    pub = "pub",
+    break = "break",
+    continue = "continue"
 }
 
 export const Delimiters = {

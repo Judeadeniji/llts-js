@@ -117,6 +117,7 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
         case "WhileExpression": {
             const whileExpr = node as ast.WhileExpression;
             const loopStart = currentChunk(state).code.length;
+            state.loops.push({ breakJumps: [], continueJumps: [] });
             compileExpression(state, whileExpr.condition);
             const exitJump = emitJump(state, OpCode.OP_JUMP_IF_FALSE);
             emitByte(state, OpCode.OP_POP);
@@ -125,9 +126,16 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
                 compileStatement(state, stmt);
             }
             endScope(state);
+            const loop = state.loops.pop()!;
+            for (const continueJump of loop.continueJumps) {
+                patchJump(state, continueJump);
+            }
             emitLoop(state, loopStart);
             patchJump(state, exitJump);
             emitByte(state, OpCode.OP_POP);
+            for (const breakJump of loop.breakJumps) {
+                patchJump(state, breakJump);
+            }
             break;
         }
         case "ForExpression": {
@@ -135,6 +143,7 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             beginScope(state);
             if (forExpr.init) compileStatement(state, forExpr.init);
             const loopStart = currentChunk(state).code.length;
+            state.loops.push({ breakJumps: [], continueJumps: [] });
             let exitJump = -1;
             if (forExpr.condition) {
                 compileExpression(state, forExpr.condition);
@@ -146,6 +155,12 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
                 compileStatement(state, stmt);
             }
             endScope(state);
+            
+            const loop = state.loops.pop()!;
+            for (const continueJump of loop.continueJumps) {
+                patchJump(state, continueJump);
+            }
+            
             if (forExpr.increment) {
                 compileExpression(state, forExpr.increment);
                 emitByte(state, OpCode.OP_POP);
@@ -155,7 +170,26 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
                 patchJump(state, exitJump);
                 emitByte(state, OpCode.OP_POP);
             }
+            for (const breakJump of loop.breakJumps) {
+                patchJump(state, breakJump);
+            }
             endScope(state);
+            break;
+        }
+        case "BreakExpression": {
+            if (state.loops.length === 0) {
+                throw new Error("Cannot break outside of a loop");
+            }
+            const jump = emitJump(state, OpCode.OP_JUMP);
+            state.loops[state.loops.length - 1].breakJumps.push(jump);
+            break;
+        }
+        case "ContinueExpression": {
+            if (state.loops.length === 0) {
+                throw new Error("Cannot continue outside of a loop");
+            }
+            const jump = emitJump(state, OpCode.OP_JUMP);
+            state.loops[state.loops.length - 1].continueJumps.push(jump);
             break;
         }
         default: {

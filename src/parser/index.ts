@@ -1,5 +1,5 @@
 // others
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, ArrayLiteral, type AST } from "../ast";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, BreakExpression, ContinueExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, ArrayLiteral, type AST } from "../ast";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 import fs from "node:fs";
@@ -113,6 +113,8 @@ export class Parser {
                     return stmt;
                 }
                 if (token.value === "return") return this.parseReturnStatement();
+                if (token.value === "break") return this.parseBreakStatement();
+                if (token.value === "continue") return this.parseContinueStatement();
                 if (token.value === "true" || token.value === "false") return this.parseExpressionStatement();
 
                 reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected keyword: ${token.value}`);
@@ -125,6 +127,7 @@ export class Parser {
                 reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected token: ${token.value} at line ${token.line}`);
                 process.exit(1);
             default:
+                console.error("FAILING ON TOKEN:", token);
                 reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected token: ${token.value} at line ${token.line}`);
                 process.exit(1);
         }
@@ -134,7 +137,7 @@ export class Parser {
         const expr = this.parseExpression();
         this.consume(
             "DELIMITER",
-            `Expected ';' after expression, found "${this.peek()!.value}" instead`,
+            `Expected ';' after expression, found "${this.peek()?.value}" instead`,
             Delimiters.SEMICOLON
         );
         return expr;
@@ -571,9 +574,11 @@ export class Parser {
         let elseBody: Node | null = null;
 
         // Check for @else
-        if (this.match("COMPILER_KEYWORD") && this.previous()?.value === CompilerSymbols.else) {
+        if (this.check("COMPILER_KEYWORD") && this.peek()?.value === CompilerSymbols.else) {
+            this.advance(); // consume @else
             // It could be @else @if ... or just @else { ... }
-            if (this.match("COMPILER_KEYWORD") && this.previous()?.value === CompilerSymbols.if) {
+            if (this.check("COMPILER_KEYWORD") && this.peek()?.value === CompilerSymbols.if) {
+                this.advance(); // consume @if
                 elseBody = this.parseIfExpression();
             } else {
                 elseBody = this.parseBlock();
@@ -665,6 +670,26 @@ export class Parser {
         }
         this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}"`, Delimiters.SEMICOLON);
         return new ReturnExpression(returnValue, null, {
+            line: keyword.line,
+            column: keyword.column,
+            path: this.sourceFile?.name!
+        });
+    }
+
+    private parseBreakStatement(): Node {
+        const keyword = this.consume("KEYWORD", `Expected "${Keywords.break}"`, Keywords.break)!;
+        this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}"`, Delimiters.SEMICOLON);
+        return new BreakExpression(null, {
+            line: keyword.line,
+            column: keyword.column,
+            path: this.sourceFile?.name!
+        });
+    }
+
+    private parseContinueStatement(): Node {
+        const keyword = this.consume("KEYWORD", `Expected "${Keywords.continue}"`, Keywords.continue)!;
+        this.consume("DELIMITER", `Expected "${Delimiters.SEMICOLON}"`, Delimiters.SEMICOLON);
+        return new ContinueExpression(null, {
             line: keyword.line,
             column: keyword.column,
             path: this.sourceFile?.name!

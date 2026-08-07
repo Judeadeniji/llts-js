@@ -26,6 +26,11 @@ export interface FunctionDef {
     forwardJumps?: number[];
 }
 
+export interface LoopTracker {
+    breakJumps: number[];
+    continueJumps: number[];
+}
+
 export interface CompilerState {
     chunk: Chunk;
     locals: Local[];
@@ -34,6 +39,7 @@ export interface CompilerState {
     structs: Map<string, StructDef>;
     globalTypes: Map<string, string>;
     inlineReturnJumps: number[][];
+    loops: LoopTracker[];
 }
 
 export function createCompilerState(): CompilerState {
@@ -44,7 +50,8 @@ export function createCompilerState(): CompilerState {
         functions: new Map(),
         structs: new Map(),
         globalTypes: new Map(),
-        inlineReturnJumps: []
+        inlineReturnJumps: [],
+        loops: []
     };
     
     state.structs.set("string", {
