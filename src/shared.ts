@@ -8,7 +8,6 @@ export enum CompilerSymbols {
     const = "const",
     typeOf = "typeOf",
     func = "func",
-    while = "while",
     for = "for",
     if = "if",
     else = "else",

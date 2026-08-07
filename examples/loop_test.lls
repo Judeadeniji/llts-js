@@ -1,6 +1,4 @@
-$i = 0;
-@while (i < 10) {
-    i = i + 1;
+@for ($i = 0; i < 10; i = i + 1) {
     @if (i == 5) {
         print("Skipping 5");
         continue;
@@ -10,16 +8,6 @@ $i = 0;
         break;
     }
     print("i is", i);
-}
-
-print("Done with while loop. Now for loop.");
-
-@for ($j = 0; j < 5; j = j + 1) {
-    @if (j == 2) {
-        print("Skipping j=2");
-        continue;
-    }
-    print("j is", j);
 }
 
 print("Done with for loop.");

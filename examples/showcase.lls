@@ -31,10 +31,8 @@ print("Initializing Game...");
 hero |> printStatus;
 
 print("Moving hero across the map...");
-$i = 0;
-@while (i < 3) {
+@for ($i = 0; i < 3; i = i + 1) {
     hero.move(10, 5);
-    i = i + 1;
 }
 
 print("Hero was attacked by a goblin!");

@@ -233,20 +233,6 @@ export class ContinueExpression extends Node {
   }
 }
 
-export class WhileExpression extends Node {
-  override readonly nodeName = "WhileExpression";
-
-
-  constructor(
-    public condition: Node,
-    public pipeValue: Node | null,
-    public body: BlockExpression,
-    public tail: Node | null = null,
-    location?: Location,
-  ) {
-    super(location)
-  }
-}
 
 export class IfExpression extends Node {
   override readonly nodeName = "IfExpression";

@@ -114,30 +114,6 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             }
             break;
         }
-        case "WhileExpression": {
-            const whileExpr = node as ast.WhileExpression;
-            const loopStart = currentChunk(state).code.length;
-            state.loops.push({ breakJumps: [], continueJumps: [] });
-            compileExpression(state, whileExpr.condition);
-            const exitJump = emitJump(state, OpCode.OP_JUMP_IF_FALSE);
-            emitByte(state, OpCode.OP_POP);
-            beginScope(state);
-            for (const stmt of whileExpr.body.statements) {
-                compileStatement(state, stmt);
-            }
-            endScope(state);
-            const loop = state.loops.pop()!;
-            for (const continueJump of loop.continueJumps) {
-                patchJump(state, continueJump);
-            }
-            emitLoop(state, loopStart);
-            patchJump(state, exitJump);
-            emitByte(state, OpCode.OP_POP);
-            for (const breakJump of loop.breakJumps) {
-                patchJump(state, breakJump);
-            }
-            break;
-        }
         case "ForExpression": {
             const forExpr = node as ast.ForExpression;
             beginScope(state);

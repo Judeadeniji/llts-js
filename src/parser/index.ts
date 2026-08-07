@@ -1,5 +1,5 @@
 // others
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, BreakExpression, ContinueExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, ArrayLiteral, type AST } from "../ast";
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, BreakExpression, ContinueExpression, UnaryExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, ArrayLiteral, type AST } from "../ast";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
 import fs from "node:fs";
@@ -501,8 +501,6 @@ export class Parser {
                 return this.parseCompilerTypof();
             case CompilerSymbols.func:
                 return this.parseCompilerFunc();
-            case CompilerSymbols.while:
-                return this.parseWhileExpression();
             case CompilerSymbols.for:
                 return this.parseForExpression();
             case CompilerSymbols.if:
@@ -590,35 +588,6 @@ export class Parser {
             column: ifToken.column,
             path: this.sourceFile?.name!
         });
-    }
-
-    private parseWhileExpression(): Node {
-        const whileToken = this.peek()!;
-        this.consume("DELIMITER", `Expects "${Delimiters.LEFT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.LEFT_PAREN);
-        const cond = this.parseExpression();
-        this.consume("DELIMITER", `Expects "${Delimiters.RIGHT_PAREN}" but found "${this.peek()?.value}" instead.`, Delimiters.RIGHT_PAREN);
-
-        const pipeToken = this.peek()!;
-        let pipeValue: Node | null = null;
-
-        if (pipeToken.type === "DELIMITER" && pipeToken.value === Delimiters.PIPE) {
-            this.advance();
-            pipeValue = this.parsePrimary(); // only primary expressions are allowed
-            this.consume("DELIMITER", `Unexpected token "${this.peek()?.value}" expected "${Delimiters.PIPE}" instead.`, Delimiters.PIPE);
-        }
-
-        const body = this.parseBlock();
-
-        // TODO: Add support for else block
-        // const else block = this.parseControlFlowTail();
-
-        const whileExpr = new WhileExpression(cond, pipeValue, body, null, {
-            line: whileToken.line,
-            column: whileToken.column,
-            path: this.sourceFile?.name!
-        })
-
-        return whileExpr;
     }
 
     private parseForExpression(): Node {
