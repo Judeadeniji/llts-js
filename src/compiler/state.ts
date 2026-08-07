@@ -1,5 +1,8 @@
+// others
 import { Chunk } from "../bytecode";
 import * as ast from "../ast";
+
+// ----------------------------------------------------------------------
 
 export interface Local {
     name: string;
@@ -14,23 +17,34 @@ export interface StructDef {
     types: Map<string, string>;
 }
 
+export interface FunctionDef {
+    ast: ast.FunctionDeclaration;
+    address?: number;
+    isRecursive: boolean;
+    hasLoop: boolean;
+    calls: Set<string>;
+    forwardJumps?: number[];
+}
+
 export interface CompilerState {
-    chunks: Chunk[];
+    chunk: Chunk;
     locals: Local[];
     scopeDepth: number;
-    functions: ast.FunctionDeclaration[];
+    functions: Map<string, FunctionDef>;
     structs: Map<string, StructDef>;
     globalTypes: Map<string, string>;
+    inlineReturnJumps: number[][];
 }
 
 export function createCompilerState(): CompilerState {
     const state: CompilerState = {
-        chunks: [new Chunk()],
+        chunk: new Chunk(),
         locals: [],
         scopeDepth: 0,
-        functions: [],
+        functions: new Map(),
         structs: new Map(),
-        globalTypes: new Map()
+        globalTypes: new Map(),
+        inlineReturnJumps: []
     };
     
     state.structs.set("string", {
@@ -44,7 +58,5 @@ export function createCompilerState(): CompilerState {
 }
 
 export function currentChunk(state: CompilerState): Chunk {
-    const chunk = state.chunks[state.chunks.length - 1];
-    if (!chunk) throw new Error("No current chunk");
-    return chunk;
+    return state.chunk;
 }

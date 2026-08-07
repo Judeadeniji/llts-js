@@ -1,9 +1,12 @@
-import * as ast from "../ast";
-import { OpCode, Chunk, FunctionObj } from "../bytecode";
-import { type CompilerState, currentChunk } from "./state";
+// others
+import { OpCode } from "../bytecode";
 import { emitByte, emitBytes, emitJump, patchJump, emitLoop } from "./emit";
-import { beginScope, endScope } from "./scope";
 import { compileExpression } from "./expressions";
+import { beginScope, endScope } from "./scope";
+import { type CompilerState, currentChunk } from "./state";
+import * as ast from "../ast";
+
+// ----------------------------------------------------------------------
 
 export function compileStatement(state: CompilerState, node: ast.Node) {
     switch (node.nodeName) {
@@ -16,7 +19,9 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             compileExpression(state, decl.value);
             
             let typeName: string | undefined;
-            if (decl.value.nodeName === "StructInitialization") {
+            if (decl.type && decl.type.nodeName === "PrimaryExpression" && (decl.type as ast.PrimaryExpression).kind === "Identifier") {
+                typeName = (decl.type as ast.PrimaryExpression).name;
+            } else if (decl.value.nodeName === "StructInitialization") {
                 typeName = (decl.value as ast.StructInitialization).name;
             } else if (decl.value.nodeName === "ImportNode") {
                 state.globalTypes.set("$" + decl.name, `module:${(decl.value as ast.ImportNode).importPath}`);
@@ -50,7 +55,12 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             } else {
                 emitByte(state, OpCode.OP_NULL);
             }
-            emitByte(state, OpCode.OP_RETURN);
+            if (state.inlineReturnJumps.length > 0) {
+                const patch = emitJump(state, OpCode.OP_JUMP);
+                state.inlineReturnJumps[state.inlineReturnJumps.length - 1].push(patch);
+            } else {
+                emitByte(state, OpCode.OP_RETURN);
+            }
             break;
         }
         case "StructDeclaration": {
@@ -58,17 +68,20 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             const offsets = new Map<string, number>();
             const types = new Map<string, string>();
             let size = 0;
+            
             for (const field of structDecl.fields) {
                 offsets.set(field.name, size++);
                 if (field.type && field.type.nodeName === "PrimaryExpression" && (field.type as ast.PrimaryExpression).kind === "Identifier") {
                     types.set(field.name, (field.type as ast.PrimaryExpression).name);
                 }
             }
-            state.structs.set(structDecl.name, { name: structDecl.name, size, offsets, types });
-
-            for (const method of structDecl.methods) {
-                compileFunction(state, method);
-            }
+            
+            state.structs.set(structDecl.name, {
+                name: structDecl.name,
+                size,
+                offsets,
+                types
+            });
             break;
         }
         case "IfExpression": {
@@ -154,10 +167,13 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 }
 
 export function compileFunction(state: CompilerState, node: ast.FunctionDeclaration) {
-    state.chunks.push(new Chunk());
-    
     const outerLocals = state.locals;
     const outerScopeDepth = state.scopeDepth;
+    // We do NOT clear locals, because in a flat chunk, they might conflict?
+    // Wait, the VM uses baseSlot. So local variables at runtime will be at `baseSlot + index`.
+    // But at compile time, if we clear `state.locals`, the compiler will assign `localSlot = 0, 1, 2...`
+    // And the VM will read `state.stack[frame.baseSlot + 0]`. This perfectly aligns!
+    // So YES, we MUST clear state.locals!
     state.locals = [];
     state.scopeDepth = 0;
     
@@ -175,6 +191,8 @@ export function compileFunction(state: CompilerState, node: ast.FunctionDeclarat
                 let pType: string | undefined;
                 if (decl.name === "self" && methodStruct) {
                     pType = methodStruct;
+                } else if (decl.type && decl.type.nodeName === "PrimaryExpression") {
+                    pType = (decl.type as ast.PrimaryExpression).name;
                 }
                 state.locals.push({ name: decl.name, depth: state.scopeDepth, typeName: pType });
                 break;
@@ -191,6 +209,7 @@ export function compileFunction(state: CompilerState, node: ast.FunctionDeclarat
         }
     }
     
+    
     for (const stmt of node.body.statements) {
         compileStatement(state, stmt);
     }
@@ -200,14 +219,5 @@ export function compileFunction(state: CompilerState, node: ast.FunctionDeclarat
     
     state.locals = outerLocals;
     state.scopeDepth = outerScopeDepth;
-    
-    const fnChunk = state.chunks.pop()!;
-    const fn = new FunctionObj(node.name, fnChunk, params.length);
-    
-    const fnIdx = currentChunk(state).addConstant(fn);
-    emitBytes(state, OpCode.OP_CONSTANT, fnIdx);
-    
-    const nameIdx = currentChunk(state).addConstant(node.name);
-    emitBytes(state, OpCode.OP_SET_GLOBAL, nameIdx);
-    emitByte(state, OpCode.OP_POP);
+    // We no longer push a FunctionObj onto the stack or create a new chunk!
 }

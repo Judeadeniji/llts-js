@@ -46,7 +46,6 @@ export enum OpCode {
     OP_LOOP,          // [OP, offset1, offset2]
     
     // Functions & Calls
-    OP_CALL,          // [OP, arg_count]
     OP_RETURN,
     
     // Objects/Modules
@@ -58,17 +57,11 @@ export enum OpCode {
     OP_PRINT,         // [OP, arg_count] (for simplicity)
     
     OP_POP,           // Pops value off the stack
+    OP_CALL,          // [OP, arg_count] (Calls a dynamic/native function off stack)
+    OP_CALL_STATIC,   // [OP, address_high, address_low, arg_count]
 }
 
-export type Value = number | string | boolean | null | Record<string, any> | FunctionObj | NativeFunction;
-
-export class FunctionObj {
-    constructor(
-        public name: string,
-        public chunk: Chunk,
-        public arity: number
-    ) {}
-}
+export type Value = number | string | boolean | null | Record<string, any> | NativeFunction;
 
 export class NativeFunction {
     constructor(

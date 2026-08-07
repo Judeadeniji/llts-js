@@ -1,5 +1,8 @@
+// others
 import { NativeFunction, type Value } from "../bytecode";
 import { type VMState } from "./state";
+
+// ----------------------------------------------------------------------
 
 export function defineNative(state: VMState, name: string, func: (...args: Value[]) => Value | Value[]) {
     state.globals.set(name, new NativeFunction(name, func, 0));

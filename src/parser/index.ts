@@ -1,7 +1,10 @@
-import fs from "node:fs";
+// others
+import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, ArrayLiteral, type AST } from "../ast";
 import { assert, Delimiters, Keywords, reportError, scan, type Token, type TokenType } from "../scanner";
-import { AssignmentExpression, BinaryExpression, BlockExpression, CallExpression, DeclarationExpression, DocumentBody, FunctionDeclaration, ImportNode, LiteralExpression, MemberExpression, Node, Params, PrimaryExpression, ReturnExpression, UnaryExpression, WhileExpression, IfExpression, ForExpression, IndexExpression, StructDeclaration, StructInitialization, type AST } from "../ast";
 import { AssignOps, BinOps, CompilerSymbols, isCompilerKeywordToken, Literals, PRECEDENCE, UnaryOps } from "../shared";
+import fs from "node:fs";
+
+// ----------------------------------------------------------------------
 
 export class Parser {
     private tokens: Token[] = [];
@@ -118,7 +121,7 @@ export class Parser {
             case "COMPILER_KEYWORD":
                 return this.parseCompilerKeyword();
             case "DELIMITER":
-                if (token.value === Delimiters.LEFT_PAREN) return this.parseExpressionStatement();
+                if (token.value === Delimiters.LEFT_PAREN || token.value === Delimiters.LEFT_BRACKET) return this.parseExpressionStatement();
                 reportError(this.sourceFile?.name!, this.source, token.line, token.column, `Unexpected token: ${token.value} at line ${token.line}`);
                 process.exit(1);
             default:
@@ -325,6 +328,21 @@ export class Parser {
                     const expr = this.parseExpression();
                     this.consume("DELIMITER", "Expected ')'", Delimiters.RIGHT_PAREN);
                     return expr;
+                }
+                if (token.value === Delimiters.LEFT_BRACKET) {
+                    this.advance();
+                    const elements: Node[] = [];
+                    if (!(this.check("DELIMITER") && this.peek()!.value === Delimiters.RIGHT_BRACKET)) {
+                        do {
+                            elements.push(this.parseExpression());
+                        } while (this.check("DELIMITER") && this.peek()!.value === Delimiters.COMMA ? (this.advance(), true) : false);
+                    }
+                    this.consume("DELIMITER", "Expected ']'", Delimiters.RIGHT_BRACKET);
+                    return new ArrayLiteral(elements, null, {
+                        column: token.column,
+                        line: token.line,
+                        path: this.sourceFile?.name!
+                    });
                 }
         }
 

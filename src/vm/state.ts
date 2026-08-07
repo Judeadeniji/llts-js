@@ -1,8 +1,10 @@
-import { FunctionObj, type Value } from "../bytecode";
+// others
+import { type Value, Chunk } from "../bytecode";
+
+// ----------------------------------------------------------------------
 
 export interface CallFrame {
-    func: FunctionObj;
-    ip: number;
+    returnIp: number;
     baseSlot: number;
 }
 
@@ -10,16 +12,18 @@ export interface VMState {
     globals: Map<string, Value>;
     stack: Value[];
     frames: CallFrame[];
-    memory: Value[];
+    memory: Int32Array;
     heapPointer: number;
+    chunk: Chunk;
 }
 
-export function createVMState(): VMState {
+export function createVMState(chunk: Chunk): VMState {
     return {
         globals: new Map<string, Value>(),
         stack: [],
-        frames: [],
-        memory: new Array(1024 * 1024).fill(null),
-        heapPointer: 0
+        frames: [{ returnIp: 0, baseSlot: 0 }], // Initial frame for main script
+        memory: new Int32Array(1024 * 1024),
+        heapPointer: 1024,
+        chunk
     };
 }

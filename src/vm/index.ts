@@ -1,17 +1,18 @@
-import * as ast from "../ast";
+// others
 import { compile } from "../compiler/index";
-import { createVMState, type VMState } from "./state";
 import { registerBuiltins } from "./builtins";
 import { execute, call } from "./execute";
+import { createVMState, type VMState } from "./state";
+import * as ast from "../ast";
+
+// ----------------------------------------------------------------------
 
 export function run(document: ast.DocumentBody): VMState {
-    const state = createVMState();
+    const chunk = compile(document);
+    
+    const state = createVMState(chunk);
     registerBuiltins(state);
 
-    const mainFunc = compile(document);
-    
-    state.stack.push(mainFunc);
-    call(state, mainFunc, 0);
     execute(state);
 
     return state;

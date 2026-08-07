@@ -1,5 +1,8 @@
+// others
 import { Parser } from "./parser";
 import { VM } from "./vm";
+
+// ----------------------------------------------------------------------
 
 const args = process.argv.slice(2);
 

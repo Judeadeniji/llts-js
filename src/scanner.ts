@@ -1,4 +1,7 @@
+// others
 import { AssignOps, BinOps, CompilerSymbols, UnaryOps } from "./shared";
+
+// ----------------------------------------------------------------------
 
 // 1. --- TYPES & DEFINITIONS ---
 export type TokenType =

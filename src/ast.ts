@@ -1,5 +1,8 @@
+// others
 import type { Location } from "./parser/nodes";
 import type { AssignOps, BinOps, Literals, UnaryOps } from "./shared";
+
+// ----------------------------------------------------------------------
 
 export type NodeTypes =
   | "DocumentBody"
@@ -156,6 +159,14 @@ export class CallExpression extends Node {
   override readonly nodeName = "CallExpression";
 
   constructor(public callee: Node, public args: Node[], override parent: Node | null = null, location?: Location) {
+    super(location);
+  }
+}
+
+export class ArrayLiteral extends Node {
+  override readonly nodeName = "ArrayLiteral";
+
+  constructor(public elements: Node[], override parent: Node | null = null, location?: Location) {
     super(location);
   }
 }

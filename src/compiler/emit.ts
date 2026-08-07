@@ -1,13 +1,17 @@
+// others
 import { OpCode } from "../bytecode";
 import { type CompilerState, currentChunk } from "./state";
+
+// ----------------------------------------------------------------------
 
 export function emitByte(state: CompilerState, byte: number) {
     currentChunk(state).write(byte);
 }
 
-export function emitBytes(state: CompilerState, byte1: number, byte2: number) {
-    emitByte(state, byte1);
-    emitByte(state, byte2);
+export function emitBytes(state: CompilerState, ...bytes: number[]) {
+    for (const b of bytes) {
+        emitByte(state, b);
+    }
 }
 
 export function emitConstant(state: CompilerState, value: any) {

@@ -1,21 +1,25 @@
-import { OpCode, FunctionObj, NativeFunction, type Value } from "../bytecode";
-import type { VMState, CallFrame } from "./state";
+// others
+import { OpCode, NativeFunction, type Value } from "../bytecode";
+import { compile } from "../compiler/index";
+import { Parser } from "../parser";
+import { run } from "./index";
 import { push, pop, peek } from "./stack";
+import type { VMState, CallFrame } from "./state";
 import fs from "node:fs";
 import path from "node:path";
-import { Parser } from "../parser";
-import { compile } from "../compiler/index";
-import { run } from "./index";
+
+// ----------------------------------------------------------------------
 
 export function execute(state: VMState) {
-    while (state.frames.length > 0) {
-        const frame = state.frames[state.frames.length - 1]!;
-        const chunk = frame.func.chunk;
-        
-        const readByte = () => chunk.code[frame.ip++]!;
-        const readShort = () => (readByte() << 8) | readByte();
-        const readConstant = () => chunk.constants[readByte()]!;
-        
+    const chunk = state.chunk;
+    let ip = 0;
+    let frame = state.frames[state.frames.length - 1]!;
+    
+    const readByte = () => chunk.code[ip++]!;
+    const readShort = () => (readByte() << 8) | readByte();
+    const readConstant = () => chunk.constants[readByte()]!;
+    
+    while (ip < chunk.code.length) {
         const instruction = readByte();
         
         switch (instruction) {
@@ -189,31 +193,79 @@ export function execute(state: VMState) {
                 break;
             case OpCode.OP_JUMP:
                 const offset = readShort();
-                frame.ip += offset;
+                ip += offset;
                 break;
             case OpCode.OP_JUMP_IF_FALSE:
                 const jumpOffset = readShort();
                 const peekVal = state.stack[state.stack.length - 1];
                 if (!peekVal) {
-                    frame.ip += jumpOffset;
+                    ip += jumpOffset;
                 }
                 break;
             case OpCode.OP_LOOP:
                 const loopOffset = readShort();
-                frame.ip -= loopOffset;
+                ip -= loopOffset;
                 break;
-            case OpCode.OP_CALL:
+            case OpCode.OP_CALL: {
                 const argCount = readByte();
-                callValue(state, state.stack[state.stack.length - 1 - argCount]!, argCount);
+                const callee = state.stack[state.stack.length - 1 - argCount]!;
+                if (callee instanceof NativeFunction) {
+                    const args = [];
+                    for (let i = 0; i < argCount; i++) {
+                        args.push(pop(state)!);
+                    }
+                    args.reverse();
+                    const result = callee.func(...args);
+                    pop(state); // pop native function
+                    push(state, result);
+                } else {
+                    throw new Error("Can only dynamic call NativeFunctions.");
+                }
                 break;
-            case OpCode.OP_PRINT:
+            }
+            case OpCode.OP_CALL_STATIC:
+                const address = readShort();
+                const argCount = readByte();
+                
+                frame.returnIp = ip;
+                frame = { returnIp: 0, baseSlot: state.stack.length - argCount };
+                state.frames.push(frame);
+                if (state.frames.length > 256) throw new Error("Maximum call stack size exceeded");
+                ip = address;
+                break;
+            case OpCode.OP_PRINT: {
                 const pArgCount = readByte();
                 const args = [];
                 for (let i = 0; i < pArgCount; i++) {
                     args.push(pop(state));
                 }
-                console.log(...args.reverse());
+                const formattedArgs = args.reverse().map(arg => {
+                    if (typeof arg === "number" && arg > 0 && arg < state.heapPointer) {
+                        const charPtr = state.memory[arg] as number;
+                        const length = state.memory[arg + 1] as number;
+                        if (charPtr !== undefined && length !== undefined && 
+                            charPtr >= 0 && charPtr < state.heapPointer && 
+                            length > 0 && length < 1000) {
+                            
+                            let str = "";
+                            let isString = true;
+                            for (let j = 0; j < length; j++) {
+                                const char = state.memory[charPtr + j] as number;
+                                if (char === undefined || char < 32 || char > 126) {
+                                    isString = false;
+                                    break;
+                                }
+                                str += String.fromCharCode(char);
+                            }
+                            if (isString) return str;
+                        }
+                    }
+                    return arg;
+                });
+                console.log(...formattedArgs);
+                push(state, null);
                 break;
+            }
             case OpCode.OP_IMPORT:
                 let importPath = readConstant() as string;
                 if (importPath === "std") {
@@ -247,49 +299,14 @@ export function execute(state: VMState) {
             case OpCode.OP_RETURN:
                 const result = pop(state);
                 const poppingFrame = state.frames.pop()!;
-                if (state.frames.length === 0) {
-                    // VM finishes execution
-                    return;
-                }
-                
-                // Pop the function and its arguments from the stack
-                state.stack.length = poppingFrame.baseSlot - 1;
-                push(state, result!);
+                if (state.frames.length === 0) return; // End of execution
+                frame = state.frames[state.frames.length - 1]!;
+                ip = frame.returnIp;
+                state.stack.length = poppingFrame.baseSlot; // clean up args
+                push(state, result);
                 break;
         }
     }
 }
 
-export function callValue(state: VMState, callee: Value, argCount: number) {
-    if (callee instanceof NativeFunction) {
-        const args = [];
-        for (let i = 0; i < argCount; i++) {
-            args.push(pop(state)!);
-        }
-        args.reverse();
-        const result = callee.func(...args);
-        pop(state); // pop native function
-        push(state, result);
-        return;
-    }
-    
-    if (callee instanceof FunctionObj) {
-        call(state, callee, argCount);
-        return;
-    }
-    
-    throw new Error("Can only call functions and classes.");
-}
 
-export function call(state: VMState, func: FunctionObj, argCount: number) {
-    let actualArgCount = argCount;
-    if (argCount < func.arity) {
-        for (let i = argCount; i < func.arity; i++) {
-            push(state, null);
-            actualArgCount++;
-        }
-    }
-    
-    const frame: CallFrame = { func, ip: 0, baseSlot: state.stack.length - actualArgCount };
-    state.frames.push(frame);
-}

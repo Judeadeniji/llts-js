@@ -1,4 +1,7 @@
+// others
 import type { CompilerKeywordToken, IToken } from "./scanner";
+
+// ----------------------------------------------------------------------
 
 export enum CompilerSymbols {
     import = "import",

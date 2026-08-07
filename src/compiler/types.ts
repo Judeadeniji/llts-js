@@ -1,6 +1,9 @@
-import * as ast from "../ast";
-import type { CompilerState } from "./state";
+// others
 import { resolveLocal } from "./scope";
+import type { CompilerState } from "./state";
+import * as ast from "../ast";
+
+// ----------------------------------------------------------------------
 
 export function resolveType(state: CompilerState, node: ast.Node): string | undefined {
     switch (node.nodeName) {

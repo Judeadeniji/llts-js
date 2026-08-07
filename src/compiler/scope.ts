@@ -1,6 +1,9 @@
+// others
 import { OpCode } from "../bytecode";
-import { type CompilerState, currentChunk } from "./state";
 import { emitByte, emitBytes } from "./emit";
+import { type CompilerState, currentChunk } from "./state";
+
+// ----------------------------------------------------------------------
 
 export function beginScope(state: CompilerState) {
     state.scopeDepth++;
