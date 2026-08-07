@@ -60,7 +60,7 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
             let size = 0;
             for (const field of structDecl.fields) {
                 offsets.set(field.name, size++);
-                if (field.type.nodeName === "PrimaryExpression" && (field.type as ast.PrimaryExpression).kind === "Identifier") {
+                if (field.type && field.type.nodeName === "PrimaryExpression" && (field.type as ast.PrimaryExpression).kind === "Identifier") {
                     types.set(field.name, (field.type as ast.PrimaryExpression).name);
                 }
             }

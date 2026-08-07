@@ -1,6 +1,6 @@
 import * as ast from "../ast";
 import { OpCode } from "../bytecode";
-import { CompilerState, currentChunk } from "./state";
+import { type CompilerState, currentChunk } from "./state";
 import { emitByte, emitBytes, emitConstant, emitJump, patchJump } from "./emit";
 import { resolveVariable, resolveLocal } from "./scope";
 import { resolveType } from "./types";

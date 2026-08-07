@@ -1,5 +1,5 @@
 import * as ast from "../ast";
-import { CompilerState } from "./state";
+import type { CompilerState } from "./state";
 import { resolveLocal } from "./scope";
 
 export function resolveType(state: CompilerState, node: ast.Node): string | undefined {
