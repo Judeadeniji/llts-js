@@ -169,15 +169,6 @@ export function compileFunction(state: CompilerState, node: ast.FunctionDeclarat
 
     const params = node.params?.params || [];
     for (const p of params) {
-        // if (p.nodeName === "DeclarationNode" || p.nodeName === "PrimaryExpression") {
-        //     const pName = p.;
-        //     let pType: string | undefined;
-        //     if (pName === "self" && methodStruct) {
-        //         pType = methodStruct;
-        //     }
-        //     state.locals.push({ name: pName, depth: state.scopeDepth, typeName: pType });
-        // }
-
         switch (p.nodeName) {
             case "DeclarationNode": {
                 const decl = p as ast.DeclarationExpression;
