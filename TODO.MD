@@ -52,7 +52,7 @@ This document tracks the current capabilities of the LLTS (Low Level TypeScript)
 - [x] **Branching**: `break`, `continue` keywords inside loops.
 
 ### 2. Type System & Data Structures
-- [ ] **Arrays/Lists**: Syntax and support for primitive collection types over the `Int32Array` heap.
+- [ ] **Arrays/Lists**: Syntax and support for primitive collection types over the `Int32Array` heap. (NEXT UP)
 - [ ] **Type Checker**: Implement semantic analysis pass to verify types natively.
 
 ### 3. Backend / Execution
