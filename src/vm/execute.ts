@@ -1,5 +1,5 @@
 import { OpCode, FunctionObj, NativeFunction, type Value } from "../bytecode";
-import { type VMState, CallFrame } from "./state";
+import type { VMState, CallFrame } from "./state";
 import { push, pop, peek } from "./stack";
 import fs from "node:fs";
 import path from "node:path";
@@ -290,6 +290,6 @@ export function call(state: VMState, func: FunctionObj, argCount: number) {
         }
     }
     
-    const frame = new CallFrame(func, 0, state.stack.length - actualArgCount);
+    const frame: CallFrame = { func, ip: 0, baseSlot: state.stack.length - actualArgCount };
     state.frames.push(frame);
 }

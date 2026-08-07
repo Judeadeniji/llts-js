@@ -1,11 +1,9 @@
 import { FunctionObj, type Value } from "../bytecode";
 
-export class CallFrame {
-    constructor(
-        public func: FunctionObj,
-        public ip: number,
-        public baseSlot: number
-    ) {}
+export interface CallFrame {
+    func: FunctionObj;
+    ip: number;
+    baseSlot: number;
 }
 
 export interface VMState {
