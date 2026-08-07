@@ -274,6 +274,7 @@ export class StructDeclaration extends Node {
   constructor(
     public name: string,
     public fields: { name: string, type: Node | null }[],
+    public methods: FunctionDeclaration[] = [],
     location?: Location,
   ) {
     super(location);

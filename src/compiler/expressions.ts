@@ -252,6 +252,37 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
                 return;
             }
 
+            if (call.callee.nodeName === "MemberExpression") {
+                const mem = call.callee as ast.MemberExpression;
+                let typeName = resolveType(state, mem.object);
+                if (typeName) {
+                    if (typeName.includes(".")) {
+                        const parts = typeName.split(".");
+                        const modulePath = state.globalTypes.get("$" + parts[0]);
+                        if (modulePath && modulePath.startsWith("module:")) {
+                            typeName = modulePath.replace("module:", "") + "::" + parts[1];
+                        }
+                    }
+                    const structDef = state.structs.get(typeName);
+                    if (structDef && mem.property.nodeName === "PrimaryExpression") {
+                        const propName = (mem.property as ast.PrimaryExpression).name;
+                        if (!structDef.offsets.has(propName)) {
+                            // Method call
+                            const methodName = `${typeName}::${propName}`;
+                            const nameIdx = currentChunk(state).addConstant(methodName);
+                            emitBytes(state, OpCode.OP_GET_GLOBAL, nameIdx);
+                            
+                            compileExpression(state, mem.object); // self
+                            for (const arg of call.args) {
+                                compileExpression(state, arg);
+                            }
+                            emitBytes(state, OpCode.OP_CALL, call.args.length + 1);
+                            return;
+                        }
+                    }
+                }
+            }
+
             compileExpression(state, call.callee);
             for (const arg of call.args) {
                 compileExpression(state, arg);

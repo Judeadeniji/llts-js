@@ -499,8 +499,17 @@ export class Parser {
         this.consume("DELIMITER", "Expected '{' before struct body", Delimiters.LEFT_BRACE);
         
         const fields: { name: string, type: Node | null }[] = [];
+        const methods: FunctionDeclaration[] = [];
         
         while (!this.check("EOF") && !(this.check("DELIMITER") && this.peek()!.value === Delimiters.RIGHT_BRACE)) {
+            if (this.check("COMPILER_KEYWORD") && this.peek()!.value === "func") {
+                this.advance();
+                const func = this.parseCompilerFunc() as FunctionDeclaration;
+                func.name = `${name.value}::${func.name}`;
+                methods.push(func);
+                continue;
+            }
+
             const fieldName = this.consume("IDENTIFIER", "Expected field name in struct declaration")!;
             this.consume("DELIMITER", "Expected ':' after field name", Delimiters.COLON);
             
@@ -518,7 +527,7 @@ export class Parser {
         
         this.consume("DELIMITER", "Expected '}' after struct body", Delimiters.RIGHT_BRACE);
         
-        return new StructDeclaration(name.value, fields, {
+        return new StructDeclaration(name.value, fields, methods, {
             line: structToken.line,
             column: structToken.column,
             path: this.sourceFile?.name!

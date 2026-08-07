@@ -65,6 +65,10 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
                 }
             }
             state.structs.set(structDecl.name, { name: structDecl.name, size, offsets, types });
+
+            for (const method of structDecl.methods) {
+                compileFunction(state, method);
+            }
             break;
         }
         case "IfExpression": {
@@ -158,10 +162,41 @@ export function compileFunction(state: CompilerState, node: ast.FunctionDeclarat
     state.scopeDepth = 0;
     
     beginScope(state);
+    let methodStruct: string | undefined;
+    if (node.name.includes("::")) {
+        methodStruct = node.name.split("::")[0];
+    }
+
     const params = node.params?.params || [];
     for (const p of params) {
-        if (p.nodeName === "DeclarationNode" || p.nodeName === "PrimaryExpression") {
-            state.locals.push({ name: (p as any).name, depth: state.scopeDepth });
+        // if (p.nodeName === "DeclarationNode" || p.nodeName === "PrimaryExpression") {
+        //     const pName = p.;
+        //     let pType: string | undefined;
+        //     if (pName === "self" && methodStruct) {
+        //         pType = methodStruct;
+        //     }
+        //     state.locals.push({ name: pName, depth: state.scopeDepth, typeName: pType });
+        // }
+
+        switch (p.nodeName) {
+            case "DeclarationNode": {
+                const decl = p as ast.DeclarationExpression;
+                let pType: string | undefined;
+                if (decl.name === "self" && methodStruct) {
+                    pType = methodStruct;
+                }
+                state.locals.push({ name: decl.name, depth: state.scopeDepth, typeName: pType });
+                break;
+            }
+            case "PrimaryExpression": {
+                const prim = p as ast.PrimaryExpression;
+                let pType: string | undefined;
+                if (prim.kind === "Identifier" && prim.name === "self" && methodStruct) {
+                    pType = methodStruct;
+                }
+                state.locals.push({ name: prim.name, depth: state.scopeDepth, typeName: pType });
+                break;
+            }
         }
     }
     
