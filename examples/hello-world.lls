@@ -62,7 +62,7 @@ $k = a * b / c % 2;
 # assignment expressions
 $l = a = b = c + 1;
 
-@const $add = std.math.add;
+$add = std.math.add;
 
 # function calls
 $m = add(a, b);

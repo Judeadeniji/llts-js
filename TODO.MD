@@ -58,6 +58,7 @@
 - [x] **Explicit error handling** — language-level error types, `error(msg)` and `?` operator.
 - [x] **`@const` enforcement** — `@const` declarations must be immutable; re-assignment should be a compile error.
   - File: `src/compiler/statements.ts` `DeclarationNode` + scope tracker.
+- [x] **`@const` initializers** — must be compile-time constant expressions (literals, other consts, ops on those, `@import`, `@typeOf`); no mutable vars or calls.
 
 ### P2 — Standard Library
 

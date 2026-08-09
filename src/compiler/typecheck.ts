@@ -3,6 +3,7 @@
  * Unannotated = Unknown (skip checks). Annotated sites are enforced.
  */
 import type * as ast from "../ast";
+import { createConstEnv, isConstantExpr, type ConstEnv } from "./const-expr";
 import { lookupNativeSig } from "./native-sigs";
 import { tryResolveStaticPath } from "./expressions";
 import type { CompilerState } from "./state";
@@ -43,6 +44,8 @@ interface Env {
 	expectedReturn: Type | null;
 	/** Annotated return (for ? propagation checks). */
 	annotatedReturn: Type | null;
+	/** Names usable in `@const` initializers (Go-style constant exprs). */
+	constNames: Set<string>;
 }
 
 function pushScope(env: Env) {
@@ -659,7 +662,19 @@ function checkStmt(
 				if (mod?.startsWith("module:")) {
 					define(env, decl.name, { kind: "struct", name: mod });
 				}
+				// `@const $std = @import(...)` and bare import aliases are comptime
+				if (decl.isConst || mod?.startsWith("module:")) {
+					env.constNames.add(decl.name);
+				}
 				return null;
+			}
+			if (decl.isConst) {
+				const cenv: ConstEnv = { constNames: env.constNames };
+				if (!isConstantExpr(state, cenv, decl.value)) {
+					throw new TypeCheckError(
+						`'${decl.name}' is @const but initializer is not a compile-time constant`,
+					);
+				}
 			}
 			const valueType = inferExpr(state, env, decl.value);
 			const annot = decl.type ? typeFromAst(decl.type, state) : null;
@@ -674,6 +689,9 @@ function checkStmt(
 				state.globalTypes.set(decl.name, valueType.name);
 			} else {
 				define(env, decl.name, valueType);
+			}
+			if (decl.isConst) {
+				env.constNames.add(decl.name);
 			}
 			return null;
 		}
@@ -704,12 +722,17 @@ function checkStmt(
 	}
 }
 
-function checkFunction(state: CompilerState, fn: ast.FunctionDeclaration) {
+function checkFunction(
+	state: CompilerState,
+	fn: ast.FunctionDeclaration,
+	topLevelConsts: Set<string>,
+) {
 	const env: Env = {
 		locals: [],
 		globals: new Map(),
 		expectedReturn: null,
 		annotatedReturn: null,
+		constNames: new Set(topLevelConsts),
 	};
 	// Seed globals from state
 	for (const [k, v] of state.globalTypes) {
@@ -776,24 +799,41 @@ export function typecheck(state: CompilerState, document: ast.DocumentBody) {
 		}
 	}
 
+	// Seed: module aliases are always comptime; top-level @const names for functions
+	const moduleAliases = createConstEnv(state).constNames;
+	for (const stmt of document.statements) {
+		if (stmt.nodeName !== "DeclarationNode") continue;
+		const decl = stmt as ast.DeclarationExpression;
+		if (decl.value.nodeName === "ImportNode") {
+			moduleAliases.add(decl.name);
+		}
+	}
+	const topLevelConsts = new Set(moduleAliases);
+	for (const stmt of document.statements) {
+		if (stmt.nodeName !== "DeclarationNode") continue;
+		const decl = stmt as ast.DeclarationExpression;
+		if (decl.isConst) topLevelConsts.add(decl.name);
+	}
+
 	// Check all functions
 	for (const stmt of document.statements) {
 		if (stmt.nodeName === "FunctionDeclaration") {
-			checkFunction(state, stmt as ast.FunctionDeclaration);
+			checkFunction(state, stmt as ast.FunctionDeclaration, topLevelConsts);
 		} else if (stmt.nodeName === "StructDeclaration") {
 			const s = stmt as ast.StructDeclaration;
 			for (const m of s.methods) {
-				checkFunction(state, m);
+				checkFunction(state, m, topLevelConsts);
 			}
 		}
 	}
 
-	// Top-level script
+	// Top-level script — add @const names in order (no forward refs)
 	const env: Env = {
 		locals: [new Map()],
 		globals: new Map(),
 		expectedReturn: null,
 		annotatedReturn: null,
+		constNames: new Set(moduleAliases),
 	};
 	for (const [k, v] of state.globalTypes) {
 		if (k.startsWith("$")) {

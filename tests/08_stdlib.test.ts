@@ -15,7 +15,7 @@ print(string.len(s));
 print(string.concat("Hello ", "World"));
 print(string.substr(s, 0, 5));
 print(string.indexOf(s, "World"));
-@const $parts = string.split("a,b,c", ",");
+$parts = string.split("a,b,c", ",");
 print(parts[0]);
 print(parts[1]);
 print(parts[2]);
@@ -307,7 +307,7 @@ test("io.writeFile followed by io.readFile round-trips content built from string
   runSource(`
 @const $io = @import("std/io");
 @const $string = @import("std/string");
-@const $msg = string.concat("round", "trip");
+$msg = string.concat("round", "trip");
 io.writeFile("roundtrip_test.txt", msg);
 print(io.readFile("roundtrip_test.txt"));
 `);
