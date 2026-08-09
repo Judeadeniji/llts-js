@@ -4,6 +4,11 @@ import * as path from "node:path";
 import { LLTSFunction, type Chunk, OpCode } from "../bytecode";
 import { Parser } from "../parser";
 import { emitByte, emitBytes, emitJump, patchJump } from "./emit";
+import {
+	collectLocalBindings,
+	qualifyModuleDecls,
+	rewriteModuleRefs,
+} from "./modules";
 import { type CompilerState, createCompilerState } from "./state";
 import { typeAstToDisplay } from "./type-from-ast";
 import { typecheck } from "./typecheck";
@@ -176,12 +181,28 @@ function registerFunctions(state: CompilerState, document: ast.DocumentBody) {
 	}
 }
 
+function resolveImportPath(
+	projectRoot: string,
+	importerDir: string,
+	rawPath: string,
+): { fullPath: string; moduleKey: string } {
+	let spec = rawPath;
+	if (!spec.endsWith(".lls")) spec += ".lls";
+	const isRelative = spec.startsWith("./") || spec.startsWith("../");
+	const fullPath = path.resolve(isRelative ? importerDir : projectRoot, spec);
+	const moduleKey = isRelative
+		? path.relative(projectRoot, fullPath).split(path.sep).join("/")
+		: spec;
+	return { fullPath, moduleKey };
+}
+
 function resolveImports(
 	state: CompilerState,
 	document: ast.DocumentBody,
-	baseDir: string,
+	importerDir: string,
+	projectRoot: string = process.cwd(),
 	visited: Set<string> = new Set(),
-	currentModulePath?: string
+	currentModulePath?: string,
 ) {
 	const newStatements: ast.Node[] = [];
 
@@ -203,17 +224,19 @@ function resolveImports(
 		}
 
 		if (isImport && importNode) {
-			let importPath = importNode.importPath;
-			if (!importPath.endsWith(".lls")) {
-				importPath += ".lls";
-			}
-
-			const fullPath = path.resolve(baseDir, importPath);
+			const { fullPath, moduleKey } = resolveImportPath(
+				projectRoot,
+				importerDir,
+				importNode.importPath,
+			);
 
 			if (declNode) {
-				state.globalTypes.set(`$${declNode.name}`, `module:${importPath}`);
-				if ((declNode).isPublic && currentModulePath) {
-					state.globalTypes.set(`$${currentModulePath}::${declNode.name}`, `module:${importPath}`);
+				state.globalTypes.set(`$${declNode.name}`, `module:${moduleKey}`);
+				if (declNode.isPublic && currentModulePath) {
+					state.globalTypes.set(
+						`$${currentModulePath}::${declNode.name}`,
+						`module:${moduleKey}`,
+					);
 				}
 			}
 
@@ -227,26 +250,33 @@ function resolveImports(
 				const parser = new Parser();
 				const doc = parser.parse(source, fullPath);
 
-				resolveImports(state, doc, process.cwd(), visited, importPath);
+				resolveImports(
+					state,
+					doc,
+					path.dirname(fullPath),
+					projectRoot,
+					visited,
+					moduleKey,
+				);
 
+				const localMap = collectLocalBindings(doc.statements, moduleKey);
+				qualifyModuleDecls(doc.statements, moduleKey, localMap, state.chunk.exports);
 				for (const istmt of doc.statements) {
-					if (istmt.nodeName === "StructDeclaration" && (istmt as ast.StructDeclaration).isPublic) {
-						const s = istmt as ast.StructDeclaration;
-						if (!s.name.includes("::")) s.name = `${importPath}::${s.name}`;
-						newStatements.push(s);
-					} else if (istmt.nodeName === "FunctionDeclaration" && (istmt as ast.FunctionDeclaration).isPublic) {
-						const f = istmt as ast.FunctionDeclaration;
-						if (!f.name.includes("::")) f.name = `${importPath}::${f.name}`;
-						newStatements.push(f);
-					} else if (istmt.nodeName === "DeclarationNode" && (istmt as ast.DeclarationExpression).isPublic) {
-						const d = istmt as ast.DeclarationExpression;
-						if (!d.name.includes("::")) d.name = `${importPath}::${d.name}`;
-						newStatements.push(d);
-					} else if (istmt.nodeName === "ExternDeclaration" && (istmt as ast.ExternDeclaration).isPublic) {
-						const e = istmt as ast.ExternDeclaration;
-						if (!e.name.includes("::")) e.name = `${importPath}::${e.name}`;
-						newStatements.push(e);
+					// Only rewrite this module's own decls (skip already-qualified nested inlines)
+					const name =
+						istmt.nodeName === "StructDeclaration"
+							? (istmt as ast.StructDeclaration).name
+							: istmt.nodeName === "FunctionDeclaration"
+								? (istmt as ast.FunctionDeclaration).name
+								: istmt.nodeName === "DeclarationNode"
+									? (istmt as ast.DeclarationExpression).name
+									: istmt.nodeName === "ExternDeclaration"
+										? (istmt as ast.ExternDeclaration).name
+										: null;
+					if (name?.startsWith(`${moduleKey}::`)) {
+						rewriteModuleRefs(istmt, localMap);
 					}
+					newStatements.push(istmt);
 				}
 			}
 			continue; // Do not emit the original import node to runtime
@@ -272,8 +302,13 @@ export function compile(
 	state.chunk.file = document.path || "<anonymous>";
 	state.chunk.source = document.source || "";
 
-	// Phase 0: Resolve imports and inline public declarations
-	resolveImports(state, document, process.cwd());
+	// Phase 0: Resolve imports; inline module decls (pub = exported)
+	const projectRoot = process.cwd();
+	const entryDir =
+		document.path && document.path !== "<anonymous>"
+			? path.dirname(path.resolve(projectRoot, document.path))
+			: projectRoot;
+	resolveImports(state, document, entryDir, projectRoot);
 
 	// Phase 1: Register functions and compute call graph for recursion
 	registerFunctions(state, document);

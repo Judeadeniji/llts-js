@@ -412,14 +412,23 @@ export function execute(state: VMState, startIp: number = 0) {
 			case OpCode.OP_GET_MODULE: {
 				const moduleName = readConstant() as string;
 				const modObj: Record<string, any> = {};
+				const exports = state.chunk.exports;
 				for (const [key, func] of state.chunk.functions.entries()) {
-					if (key.startsWith(`${moduleName}::`)) {
+					if (
+						key.startsWith(`${moduleName}::`) &&
+						!key.slice(moduleName.length + 2).includes("::") &&
+						exports.has(key)
+					) {
 						const shortName = key.substring(moduleName.length + 2);
 						modObj[shortName] = func;
 					}
 				}
 				for (const [key, func] of state.globals.entries()) {
-					if (key.startsWith(`${moduleName}::`)) {
+					if (
+						key.startsWith(`${moduleName}::`) &&
+						!key.slice(moduleName.length + 2).includes("::") &&
+						exports.has(key)
+					) {
 						const shortName = key.substring(moduleName.length + 2);
 						modObj[shortName] = func;
 					}

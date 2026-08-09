@@ -95,7 +95,16 @@ function resolveModuleType(
 		const parts = typeName.split(".");
 		const modulePath = state.globalTypes.get(`$${parts[0]}`);
 		if (modulePath?.startsWith("module:")) {
-			return `${modulePath.replace("module:", "")}::${parts[1]}`;
+			const qualified = `${modulePath.replace("module:", "")}::${parts[1]}`;
+			if (
+				!state.chunk.exports.has(qualified) &&
+				!state.globalTypes.get(`$${qualified}`)?.startsWith("module:")
+			) {
+				throw new TypeCheckError(
+					`'${parts[0]}' has no export '${parts[1]}'`,
+				);
+			}
+			return qualified;
 		}
 	}
 	return typeName;
@@ -186,7 +195,27 @@ function resolveCalleeName(
 			}
 		}
 		const staticPath = tryResolveStaticPath(state, call.callee);
-		if (staticPath) return staticPath;
+		if (staticPath) {
+			if (
+				staticPath.includes("::") &&
+				!state.chunk.exports.has(staticPath) &&
+				!state.globalTypes.get(`$${staticPath}`)?.startsWith("module:")
+			) {
+				const mem = call.callee as ast.MemberExpression;
+				const modName =
+					mem.object.nodeName === "PrimaryExpression"
+						? (mem.object as ast.PrimaryExpression).name
+						: "Module";
+				const propName =
+					mem.property.nodeName === "PrimaryExpression"
+						? (mem.property as ast.PrimaryExpression).name
+						: "property";
+				throw new TypeCheckError(
+					`'${modName}' has no export '${propName}'`,
+				);
+			}
+			return staticPath;
+		}
 	}
 	const staticPath = tryResolveStaticPath(state, call.callee);
 	return staticPath;
@@ -325,12 +354,13 @@ function inferExpr(
 				return TUnknown;
 			}
 
-			// Method call: first arg is receiver when MemberExpression on struct
+			// Method call: first arg is receiver (not for module.fn calls)
 			let args = [...call.args];
 			let sig = fnParamTypes(state, name);
 			if (
 				call.callee.nodeName === "MemberExpression" &&
-				name.includes("::")
+				name.includes("::") &&
+				!name.includes(".lls::")
 			) {
 				const mem = call.callee as ast.MemberExpression;
 				args = [mem.object, ...call.args];
@@ -389,6 +419,23 @@ function inferExpr(
 			const mem = node as ast.MemberExpression;
 			const staticPath = tryResolveStaticPath(state, node);
 			if (staticPath && state.functions.has(staticPath)) {
+				if (
+					staticPath.includes("::") &&
+					!state.chunk.exports.has(staticPath) &&
+					!state.globalTypes.get(`$${staticPath}`)?.startsWith("module:")
+				) {
+					const modName =
+						mem.object.nodeName === "PrimaryExpression"
+							? (mem.object as ast.PrimaryExpression).name
+							: "Module";
+					const propName =
+						mem.property.nodeName === "PrimaryExpression"
+							? (mem.property as ast.PrimaryExpression).name
+							: "property";
+					throw new TypeCheckError(
+						`'${modName}' has no export '${propName}'`,
+					);
+				}
 				return fnReturnType(state, staticPath);
 			}
 			const objType = inferExpr(state, env, mem.object);
@@ -398,14 +445,25 @@ function inferExpr(
 			) {
 				const prop = (mem.property as ast.PrimaryExpression).name;
 				if (objType.name.startsWith("module:")) {
-					// module namespace — export type unknown until looked up
+					// module namespace — pub exports have known types; other
+					// properties stay Unknown (dynamic bag / privacy).
 					const path = objType.name.replace("module:", "");
 					const exportName = `${path}::${prop}`;
+					const re = state.globalTypes.get(`$${exportName}`);
+					if (
+						!state.chunk.exports.has(exportName) &&
+						!re?.startsWith("module:")
+					) {
+						return TUnknown;
+					}
 					if (state.functions.has(exportName)) {
 						return fnReturnType(state, exportName);
 					}
 					const gt = state.globalTypes.get(`$${exportName}`);
 					if (gt) return namedType(gt);
+					if (state.structs.has(exportName)) {
+						return { kind: "struct", name: exportName };
+					}
 					return TUnknown;
 				}
 				return fieldTypeFromStruct(state, objType.name, prop);

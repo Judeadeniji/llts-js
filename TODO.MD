@@ -80,7 +80,7 @@
 - [x] **Structs as types** — named struct annotations validated against declared structs.
 - [x] **Debug `OP_ASSERT_TYPE`** at typed boundaries; strip with `--release`.
 - [x] **`@typeOf(expr)`** — compile-time type reflection as a `string` (print with `print(@typeOf(x))`).
-- [ ] **`pub` for user files** — cross-file visibility for user-defined modules (same `pub` mechanism as any library).
+- [x] **`pub` for user files** — cross-file visibility; private decls compile for the module but are not exported; `./` / `../` imports resolve relative to the importer.
 
 ### P5 — Memory
 
@@ -94,7 +94,16 @@
 
 ---
 
+## ⏸ Deferred
+
+- [ ] **VM string encoding / byte heap type** — today strings are JS strings + heap `[len][charCode…]`; a real tagged byte buffer / unified encoding is later.
+- [ ] **Runtime-enforced fixed buffers** — `[N]T` is compile-time only; capacity traps / non-growing buffers later.
+- [ ] **UTF-8 vs code-unit length** — `len` / `[N]byte` inference currently use JS UTF-16 code units; revisit UTF-8 byte vs code-point policy later.
+
+---
+
 ## ❌ Removed / Not Planned
 
 - `@while` loops: removed completely (use `@for` with a condition instead).
 - C-style `@for ($i=0; i<N; i=i+1)`: not planned; use `@for (0..N) |i|`.
+- **Generics / symbolic `[N]T` type params** — not planned; array lengths stay numeric literals only.

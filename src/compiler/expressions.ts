@@ -352,6 +352,11 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				const modulePath = state.globalTypes.get(`$${parts[0]}`);
 				if (modulePath?.startsWith("module:")) {
 					structName = `${modulePath.replace("module:", "")}::${parts[1]}`;
+					if (!state.chunk.exports.has(structName)) {
+						throw new Error(
+							`CompileError: '${parts[0]}' has no export '${parts[1]}'`,
+						);
+					}
 				}
 			}
 
@@ -398,10 +403,24 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			
 			const staticPath = tryResolveStaticPath(state, node);
 			if (staticPath) {
-				if (staticPath.includes("::") && !state.functions.has(staticPath) && !state.globalVars.has(staticPath) && !state.globalConsts.has(staticPath) && !state.structs.has(staticPath) && !state.nativeGlobals.has(staticPath)) {
-					const modName = mem.object.nodeName === "PrimaryExpression" ? (mem.object as ast.PrimaryExpression).name : "Module";
-					const propName = mem.property.nodeName === "PrimaryExpression" ? (mem.property as ast.PrimaryExpression).name : "property";
-					throw new Error(`CompileError: '${modName}' has no export '${propName}'`);
+				if (staticPath.includes("::")) {
+					const reExport = state.globalTypes.get(`$${staticPath}`);
+					const exported =
+						state.chunk.exports.has(staticPath) ||
+						reExport?.startsWith("module:");
+					if (!exported) {
+						const modName =
+							mem.object.nodeName === "PrimaryExpression"
+								? (mem.object as ast.PrimaryExpression).name
+								: "Module";
+						const propName =
+							mem.property.nodeName === "PrimaryExpression"
+								? (mem.property as ast.PrimaryExpression).name
+								: "property";
+						throw new Error(
+							`CompileError: '${modName}' has no export '${propName}'`,
+						);
+					}
 				}
 				const nameIdx = currentChunk(state).addConstant(staticPath);
 				if (state.functions.has(staticPath)) {
@@ -555,6 +574,25 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			if (!funcName) {
 				const staticPath = tryResolveStaticPath(state, call.callee);
 				if (staticPath) {
+					if (
+						staticPath.includes("::") &&
+						call.callee.nodeName === "MemberExpression" &&
+						!state.chunk.exports.has(staticPath) &&
+						!state.globalTypes.get(`$${staticPath}`)?.startsWith("module:")
+					) {
+						const mem = call.callee as ast.MemberExpression;
+						const modName =
+							mem.object.nodeName === "PrimaryExpression"
+								? (mem.object as ast.PrimaryExpression).name
+								: "Module";
+						const propName =
+							mem.property.nodeName === "PrimaryExpression"
+								? (mem.property as ast.PrimaryExpression).name
+								: "property";
+						throw new Error(
+							`CompileError: '${modName}' has no export '${propName}'`,
+						);
+					}
 					funcName = staticPath;
 				}
 			}

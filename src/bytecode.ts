@@ -107,6 +107,8 @@ export class Chunk {
 	code: number[] = [];
 	constants: Value[] = [];
 	functions: Map<string, LLTSFunction> = new Map();
+	/** Fully-qualified `path::name` exports visible across module boundaries. */
+	exports: Set<string> = new Set();
 	file: string = "<anonymous>";
 	source: string = "";
 
