@@ -140,7 +140,7 @@ print(a[9]);
 `);
 	expectError(res, "Array index out of bounds");
 	const combined = res.stderr + res.stdout;
-	if (!combined.includes(".lls") || !/line \d+/.test(combined)) {
-		throw new Error(`Expected LLTS file:line in error output, got:\n${combined}`);
+	if (!combined.includes(".lls") || !/\.lls:\d+:\d+/.test(combined)) {
+		throw new Error(`Expected LLTS file:line:col in error output, got:\n${combined}`);
 	}
 });
