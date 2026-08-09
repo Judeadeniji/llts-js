@@ -5,7 +5,7 @@ import { involvesUnknown, isSubtype, parseDisplayType } from "./type-ir";
 import { OpCode } from "../bytecode";
 import { checkNotNull } from "../shared";
 import { emitByte, emitBytes, emitConstant, emitJump, emitLineIfNeeded, patchJump } from "./emit";
-import { beginScope, endScope, resolveLocal, resolveVariable } from "./scope";
+import { beginScope, endScope, emitFunctionExitDefers, resolveLocal, resolveVariable } from "./scope";
 import { type CompilerState, currentChunk } from "./state";
 import { compileStatement } from "./statements";
 import type * as ast from "../ast";
@@ -623,7 +623,6 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 						);
 					} else {
 						// Forward reference, patch later
-						const { emitJump } = require("./emit");
 						const patch = emitJump(state, OpCode.OP_CALL_STATIC);
 						emitByte(state, call.args.length);
 						// Store the patch somewhere to be resolved
@@ -653,7 +652,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 							if (decl.type && decl.type.nodeName === "PrimaryExpression") {
 								pType = (decl.type as ast.PrimaryExpression).name;
 							} else if (decl.name === "self" && funcName.includes("::")) {
-								pType = funcName.split("::")[0];
+								pType = funcName.slice(0, funcName.lastIndexOf("::"));
 							}
 							state.locals.push({
 								name: decl.name,
@@ -664,7 +663,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 							const prim = p as ast.PrimaryExpression;
 							let pType: string | undefined;
 							if (prim.name === "self" && funcName.includes("::")) {
-								pType = funcName.split("::")[0];
+								pType = funcName.slice(0, funcName.lastIndexOf("::"));
 							}
 							state.locals.push({
 								name: prim.name,
@@ -684,7 +683,6 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					emitByte(state, OpCode.OP_NULL);
 
 					const jumps = checkNotNull(state.inlineReturnJumps.pop());
-					const { patchJump } = require("./emit");
 					for (const jump of jumps) {
 						patchJump(state, jump);
 					}
@@ -733,11 +731,13 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			emitByte(state, OpCode.OP_DUP); // [value, value]
 			emitByte(state, OpCode.OP_IS_ERROR); // [value, isError]
 			const skipRet = emitJump(state, OpCode.OP_JUMP_IF_FALSE); // jumps if isError is false
-			
+
 			// --- If we are here, isError was TRUE. ---
 			emitByte(state, OpCode.OP_POP); // pop the true
+			// Error value is TOS; run defers then return it.
+			emitFunctionExitDefers(state);
 			emitByte(state, OpCode.OP_RETURN); // return the error value
-			
+
 			// --- If we jumped, isError was FALSE. ---
 			patchJump(state, skipRet);
 			emitByte(state, OpCode.OP_POP); // pop the false, leaving the value

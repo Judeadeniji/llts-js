@@ -687,6 +687,11 @@ function checkStmt(
 			}
 			return t;
 		}
+		case "DeferStatement": {
+			const def = node as ast.DeferStatement;
+			checkStmt(state, env, def.body);
+			return null;
+		}
 		case "FunctionDeclaration":
 		case "StructDeclaration":
 		case "ExternDeclaration":
@@ -732,7 +737,7 @@ function checkFunction(state: CompilerState, fn: ast.FunctionDeclaration) {
 		const d = p as ast.DeclarationExpression;
 		let t = d.type ? typeFromAst(d.type, state) : TUnknown;
 		if (d.name === "self" && fn.name.includes("::")) {
-			t = { kind: "struct", name: fn.name.split("::")[0]! };
+			t = { kind: "struct", name: fn.name.slice(0, fn.name.lastIndexOf("::")) };
 		}
 		if (isVariadic && i === params.length - 1 && t.kind !== "array") {
 			t = arrayType(t.kind === "unknown" ? TUnknown : t);

@@ -32,6 +32,10 @@ export const NATIVE_SIGS: Record<string, NativeSig> = {
 
 	__printLn: fn([TString], TUnknown, { rest: TUnknown, variadic: true }),
 	__alloc: fn([TInt], TInt),
+	__arena_create: fn([TInt], TInt),
+	__arena_alloc: fn([TInt, TInt], TInt),
+	__arena_reset: fn([TInt], TUnknown),
+	__arena_deinit: fn([TInt], TUnknown),
 	__strlen: fn([TString], TInt),
 	__substr: fn([TString, TInt, TInt], TString),
 	__indexOf: fn([TString, TString], TInt),

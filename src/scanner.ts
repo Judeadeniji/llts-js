@@ -71,6 +71,7 @@ export enum Keywords {
 	pub = "pub",
 	break = "break",
 	continue = "continue",
+	defer = "defer",
 	error = "error",
 	null = "null",
 }

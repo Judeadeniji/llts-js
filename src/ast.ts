@@ -267,6 +267,20 @@ export class ReturnExpression extends Node {
 		super(location);
 	}
 }
+
+/** `defer <stmt>` — run body LIFO when leaving the enclosing scope. */
+export class DeferStatement extends Node {
+	override readonly nodeName = "DeferStatement";
+
+	constructor(
+		public body: Node,
+		override parent: Node | null = null,
+		location?: Location,
+	) {
+		super(location);
+	}
+}
+
 export class BreakExpression extends Node {
 	override readonly nodeName = "BreakExpression";
 	constructor(

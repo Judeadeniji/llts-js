@@ -8,6 +8,7 @@ import {
 	CallExpression,
 	ContinueExpression,
 	DeclarationExpression,
+	DeferStatement,
 	DocumentBody,
 	ForExpression,
 	FunctionDeclaration,
@@ -204,6 +205,7 @@ export class Parser {
 				if (token.value === "return") return this.parseReturnStatement();
 				if (token.value === "break") return this.parseBreakStatement();
 				if (token.value === "continue") return this.parseContinueStatement();
+				if (token.value === "defer") return this.parseDeferStatement();
 				if (token.value === "true" || token.value === "false" || token.value === "error" || token.value === "null")
 					return this.parseExpressionStatement();
 
@@ -1115,6 +1117,32 @@ export class Parser {
 			Delimiters.SEMICOLON,
 		);
 		return new ReturnExpression(returnValue, null, {
+			line: keyword.line,
+			column: keyword.column,
+			path: checkNotNull(this.sourceFile?.name),
+		});
+	}
+
+	private parseDeferStatement(): Node {
+		const keyword = checkNotNull(
+			this.consume("KEYWORD", `Expected "${Keywords.defer}"`, Keywords.defer),
+		);
+		let body: Node;
+		if (
+			this.check("DELIMITER") &&
+			checkNotNull(this.peek()).value === Delimiters.LEFT_BRACE
+		) {
+			body = this.parseBlock();
+		} else {
+			const expr = this.parseExpression();
+			this.consume(
+				"DELIMITER",
+				`Expected "${Delimiters.SEMICOLON}" after defer`,
+				Delimiters.SEMICOLON,
+			);
+			body = expr;
+		}
+		return new DeferStatement(body, null, {
 			line: keyword.line,
 			column: keyword.column,
 			path: checkNotNull(this.sourceFile?.name),

@@ -33,6 +33,8 @@ export interface LoopTracker {
 	label: string | null;
 	breakJumps: number[];
 	continueJumps: number[];
+	/** Scope depth of the loop's outer beginScope (break/continue exit to here). */
+	scopeDepth: number;
 }
 
 export interface CompilerState {
@@ -52,6 +54,8 @@ export interface CompilerState {
 	debug: boolean;
 	/** Static type display strings for `@typeOf` (filled by typecheck). */
 	typeOfResults: Map<ast.Node, string>;
+	/** Deferred statement bodies per lexical scope depth (LIFO on exit). */
+	deferStacks: Map<number, ast.Node[]>;
 }
 
 export function createCompilerState(): CompilerState {
@@ -73,6 +77,7 @@ export function createCompilerState(): CompilerState {
 		lastEmittedLine: -1,
 		debug: true,
 		typeOfResults: new Map(),
+		deferStacks: new Map(),
 	};
 
 	state.structs.set("string", {

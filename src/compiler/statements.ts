@@ -13,8 +13,9 @@ import {
 import { compileExpression } from "./expressions";
 import { typeAstToDisplay, typeFromAst } from "./type-from-ast";
 import { typeTag } from "./type-ir";
-import { beginScope, endScope } from "./scope";
+import { beginScope, endScope, pushDefer, emitFunctionExitDefers, emitDefersUntil, emitPopsUntil } from "./scope";
 import { type CompilerState, currentChunk } from "./state";
+import { resolveType } from "./types";
 import * as ast from "../ast";
 
 // ----------------------------------------------------------------------
@@ -60,6 +61,9 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 						typeName = `[${arr.elements.length}]unknown`;
 						break;
 					}
+					case "CallExpression":
+						typeName = resolveType(state, decl.value);
+						break;
 				}
 			}
 
@@ -116,6 +120,11 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 			endScope(state);
 			break;
 		}
+		case "DeferStatement": {
+			const def = node as ast.DeferStatement;
+			pushDefer(state, def.body);
+			break;
+		}
 		case "ReturnExpression": {
 			const ret = node as ast.ReturnExpression;
 			if (ret.returnValue) {
@@ -123,6 +132,7 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 			} else {
 				emitByte(state, OpCode.OP_NULL);
 			}
+			emitFunctionExitDefers(state);
 			if (state.inlineReturnJumps.length > 0) {
 				const patch = emitJump(state, OpCode.OP_JUMP);
 				checkNotNull(
@@ -196,6 +206,7 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 				label: forExpr.label,
 				breakJumps: [],
 				continueJumps: [],
+				scopeDepth: state.scopeDepth,
 			});
 
 			if (forExpr.kind === "condition") {
@@ -355,15 +366,12 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 					});
 				}
 
-				const loop = { breakJumps: [], continueJumps: [], label: forExpr.label };
-				state.loops.push(loop);
-
 				for (const stmt of forExpr.body.statements) {
 					compileStatement(state, stmt);
 				}
 				endScope(state); // Pops captured variables
 
-				checkNotNull(state.loops.pop());
+				const loop = checkNotNull(state.loops.pop());
 				for (const continueJump of loop.continueJumps) {
 					patchJump(state, continueJump);
 				}
@@ -407,6 +415,8 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 					);
 				}
 			}
+			emitDefersUntil(state, targetLoop.scopeDepth);
+			emitPopsUntil(state, targetLoop.scopeDepth);
 			const jump = emitJump(state, OpCode.OP_JUMP);
 			targetLoop.breakJumps.push(jump);
 			break;
@@ -426,6 +436,9 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 					);
 				}
 			}
+			// Continue targets the point after the body scope has ended.
+			emitDefersUntil(state, targetLoop.scopeDepth);
+			emitPopsUntil(state, targetLoop.scopeDepth);
 			const jump = emitJump(state, OpCode.OP_JUMP);
 			targetLoop.continueJumps.push(jump);
 			break;
@@ -451,11 +464,12 @@ export function compileFunction(
 	// So YES, we MUST clear state.locals!
 	state.locals = [];
 	state.scopeDepth = 0;
+	state.deferStacks = new Map();
 
 	beginScope(state);
 	let methodStruct: string | undefined;
 	if (node.name.includes("::")) {
-		methodStruct = node.name.split("::")[0];
+		methodStruct = node.name.slice(0, node.name.lastIndexOf("::"));
 	}
 
 	const params = node.params?.params || [];
@@ -504,10 +518,12 @@ export function compileFunction(
 		compileStatement(state, stmt);
 	}
 
+	emitFunctionExitDefers(state);
 	emitByte(state, OpCode.OP_NULL);
 	emitByte(state, OpCode.OP_RETURN);
 
 	state.locals = outerLocals;
 	state.scopeDepth = outerScopeDepth;
+	state.deferStacks = new Map();
 	// We no longer push a FunctionObj onto the stack or create a new chunk!
 }

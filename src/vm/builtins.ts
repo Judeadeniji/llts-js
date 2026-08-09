@@ -65,6 +65,69 @@ export function registerBuiltins(state: VMState) {
 		return ptr;
 	});
 
+	const ARENA_MAGIC = 0xa5ea;
+	const ARENA_HDR = 5; // magic, data_base, data_end, watermark, alive
+
+	function arenaCheck(arena: number, op: string) {
+		if (typeof arena !== "number" || state.memory[arena] !== ARENA_MAGIC) {
+			throw new Error(`RuntimeError: ${op}: invalid arena`);
+		}
+		if (state.memory[arena + 4] !== 1) {
+			throw new Error(`RuntimeError: ${op}: arena is deinitialized`);
+		}
+	}
+
+	defineNative(state, "__arena_create", (...args: Value[]) => {
+		const capacity = args[0] as number;
+		if (typeof capacity !== "number" || capacity < 0 || !Number.isFinite(capacity)) {
+			throw new Error("RuntimeError: __arena_create: invalid capacity");
+		}
+		const ptr = state.heap.ptr;
+		const dataBase = ptr + ARENA_HDR;
+		const dataEnd = dataBase + capacity;
+		state.memory[ptr] = ARENA_MAGIC;
+		state.memory[ptr + 1] = dataBase;
+		state.memory[ptr + 2] = dataEnd;
+		state.memory[ptr + 3] = dataBase;
+		state.memory[ptr + 4] = 1;
+		state.heap.ptr = dataEnd;
+		return ptr;
+	});
+
+	defineNative(state, "__arena_alloc", (...args: Value[]) => {
+		const arena = args[0] as number;
+		const n = args[1] as number;
+		arenaCheck(arena, "__arena_alloc");
+		if (typeof n !== "number" || n < 0 || !Number.isFinite(n)) {
+			throw new Error("RuntimeError: __arena_alloc: invalid size");
+		}
+		const watermark = state.memory[arena + 3] as number;
+		const dataEnd = state.memory[arena + 2] as number;
+		if (watermark + n > dataEnd) {
+			throw new Error("RuntimeError: __arena_alloc: out of capacity");
+		}
+		state.memory[arena + 3] = watermark + n;
+		return watermark;
+	});
+
+	defineNative(state, "__arena_reset", (...args: Value[]) => {
+		const arena = args[0] as number;
+		arenaCheck(arena, "__arena_reset");
+		state.memory[arena + 3] = state.memory[arena + 1] as number;
+		return null;
+	});
+
+	defineNative(state, "__arena_deinit", (...args: Value[]) => {
+		const arena = args[0] as number;
+		if (typeof arena !== "number" || state.memory[arena] !== ARENA_MAGIC) {
+			throw new Error("RuntimeError: __arena_deinit: invalid arena");
+		}
+		// Idempotent
+		state.memory[arena + 3] = state.memory[arena + 1] as number;
+		state.memory[arena + 4] = 0;
+		return null;
+	});
+
 	function readString(ptr: number): string {
 		const len = state.memory[ptr - 1] as number;
 		let str = "";
