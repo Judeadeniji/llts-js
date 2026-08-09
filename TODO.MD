@@ -75,7 +75,9 @@
 
 - [x] **Type checker pass** — gradual semantic analysis before bytecode emission (`src/compiler/typecheck.ts`).
 - [x] **Return / param / field annotations enforced** when present; unannotated = `Unknown`.
-- [x] **`$name: T`**, `[]T`, structured `T | error`; aliases `i32`/`number`→`int`, `boolean`→`bool`.
+- [x] **`$name: T`**, `[]T` / `[N]T` (incl. nested), structured `T | error`; aliases `i32`/`number`→`int`, `boolean`→`bool`.
+- [x] **`string` ≡ `[]byte`**; string literals infer as `[N]byte`.
+- [x] **Structs as types** — named struct annotations validated against declared structs.
 - [x] **Debug `OP_ASSERT_TYPE`** at typed boundaries; strip with `--release`.
 - [x] **`@typeOf(expr)`** — compile-time type reflection as a `string` (print with `print(@typeOf(x))`).
 - [ ] **`pub` for user files** — cross-file visibility for user-defined modules (same `pub` mechanism as any library).

@@ -691,7 +691,7 @@ export class Parser {
 		);
 	}
 
-	/** Parse a type: `[]T`, `Name`, or `T | error` (and general `T | U`). */
+	/** Parse a type: `[]T`, `[N]T`, nested `[2][3]int`, `Name`, or `T | U`. */
 	private parseType(): Node {
 		const loc = () => ({
 			line: checkNotNull(this.peek()).line,
@@ -706,13 +706,33 @@ export class Parser {
 		) {
 			const start = checkNotNull(this.peek());
 			this.advance(); // '['
+			let length: number | null = null;
+			if (this.check("NUMBER") || this.check("HEX") || this.check("OCTAL") || this.check("BINARY")) {
+				const numTok = checkNotNull(this.advance());
+				const raw = numTok.value;
+				if (numTok.type === "HEX") length = parseInt(raw.slice(2), 16);
+				else if (numTok.type === "BINARY") length = parseInt(raw.slice(2), 2);
+				else if (numTok.type === "OCTAL") length = parseInt(raw.slice(2), 8);
+				else length = parseInt(raw, 10);
+				if (!Number.isFinite(length) || length < 0) {
+					reportError(
+						checkNotNull(this.sourceFile?.name),
+						this.source,
+						numTok.line,
+						numTok.column,
+						`Invalid array length '${raw}'`,
+					);
+					process.exit(1);
+				}
+			}
 			this.consume(
 				"DELIMITER",
-				"Expected ']' in array type '[]T'",
+				"Expected ']' in array type",
 				Delimiters.RIGHT_BRACKET,
 			);
-			const elem = this.parseTypeAtom();
-			left = new ArrayTypeExpression(elem, null, {
+			// Recursive: `[2][3]int` → elem is `[3]int`
+			const elem = this.parseType();
+			left = new ArrayTypeExpression(elem, length, null, {
 				line: start.line,
 				column: start.column,
 				path: checkNotNull(this.sourceFile?.name),

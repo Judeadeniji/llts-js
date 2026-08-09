@@ -306,7 +306,7 @@ test("? on a function with no error in its return type is a compile-time error",
 }
 
 print(doWork());
-`), "CompileError: '?' operator used on non-error-union type 'string'");
+`), "CompileError: '?' operator used on non-error-union type '[]byte'");
 });
 
 test("propagated error keeps its original message through multiple hops unmodified", () => {

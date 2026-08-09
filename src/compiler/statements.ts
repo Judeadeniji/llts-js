@@ -43,8 +43,24 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 						emitBytes(state, OpCode.OP_ASSERT_TYPE, tag);
 					}
 				}
-			} else if (decl.value.nodeName === "StructInitialization") {
-				typeName = (decl.value as ast.StructInitialization).name;
+			} else {
+				switch (decl.value.nodeName) {
+					case "StructInitialization":
+						typeName = (decl.value as ast.StructInitialization).name;
+						break;
+					case "LiteralNode": {
+						const lit = decl.value as ast.LiteralExpression;
+						if (lit.literal_type === "string") {
+							typeName = `[${lit.value.length}]byte`;
+						}
+						break;
+					}
+					case "ArrayLiteral": {
+						const arr = decl.value as ast.ArrayLiteral;
+						typeName = `[${arr.elements.length}]unknown`;
+						break;
+					}
+				}
 			}
 
 			// Scope-first: user bindings live in the current scope (top-level = outer script scope).

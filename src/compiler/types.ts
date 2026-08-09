@@ -6,6 +6,13 @@ import type * as ast from "../ast";
 
 // ----------------------------------------------------------------------
 
+/** Emit-time: treat string / []byte / [N]byte as stringy for opcodes. */
+export function isStringyType(t: string | undefined): boolean {
+	if (!t) return false;
+	if (t === "string") return true;
+	return /^\[\d*\]byte$/.test(t);
+}
+
 export function resolveType(
 	state: CompilerState,
 	node: ast.Node,
@@ -13,8 +20,8 @@ export function resolveType(
 	switch (node.nodeName) {
 		case "LiteralNode": {
 			const lit = node as ast.LiteralExpression;
-			if (lit.literal_type === "string") return "string";
-			if (lit.literal_type === "boolean") return "boolean";
+			if (lit.literal_type === "string") return `[${lit.value.length}]byte`;
+			if (lit.literal_type === "boolean") return "bool";
 			return "int";
 		}
 		case "PrimaryExpression": {

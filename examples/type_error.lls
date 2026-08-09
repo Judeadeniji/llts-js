@@ -1,25 +1,29 @@
-# Type system showcase — annotations, aliases, @typeOf, and structs.
+# Type system showcase — structs as types, sized arrays, string as []byte.
 
 @struct Point {
     x: int;
     y: int;
 }
 
-$p = Point { x: 10, y: 20 };
+$p: Point = Point { x: 10, y: 20 };
 $n: i32 = 42;
 $msg: string = "hello";
+$exact: [5]byte = "hello";
 $flags: boolean = true;
-$nums: []int = [1, 2, 3];
+@const $nums = [1, 2, 3];
+@const $grid: [2][2]int = [[1, 2], [3, 4]];
 
 print(@typeOf(p));
 print(@typeOf(n));
 print(@typeOf(msg));
+print(@typeOf(exact));
 print(@typeOf(flags));
 print(@typeOf(nums));
+print(@typeOf(grid));
 print(p.x);
-print(p.y);
+print(grid[1][0]);
 
 # Field assignment must match the declared type:
-#   p.y = "this is a string!";  # CompileError: string not assignable to int
+#   p.y = "nope";  # CompileError: [4]byte not assignable to int
 p.y = 99;
 print(p.y);

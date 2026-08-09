@@ -12,11 +12,14 @@ import {
 	arrayType,
 	displayType,
 	involvesUnknown,
+	isByteSlice,
 	isErrorUnion,
 	isSubtype,
 	namedType,
+	parseDisplayType,
 	type Type,
 	TBool,
+	TByte,
 	TError,
 	TInt,
 	TNull,
@@ -73,7 +76,8 @@ function requireAssign(got: Type, expected: Type, ctx: string) {
 function inferLiteral(lit: ast.LiteralExpression): Type {
 	switch (lit.literal_type) {
 		case "string":
-			return TString;
+			// string literal → [N]byte
+			return arrayType(TByte, lit.value.length);
 		case "boolean":
 			return TBool;
 		case "null":
@@ -97,19 +101,7 @@ function resolveModuleType(
 	return typeName;
 }
 
-function structFieldType(
-	state: CompilerState,
-	structName: string,
-	field: string,
-): Type | undefined {
-	const name = resolveModuleType(state, structName);
-	const def = state.structs.get(name);
-	if (!def) return undefined;
-	const ft = def.types.get(field);
-	return ft ? namedType(ft.includes("[]") ? ft : ft) : undefined;
-}
-
-/** Best-effort: struct field types are still stored as display strings. */
+/** Struct field types stored as display strings. */
 function fieldTypeFromStruct(
 	state: CompilerState,
 	structName: string,
@@ -120,12 +112,7 @@ function fieldTypeFromStruct(
 	if (!def) return TUnknown;
 	const raw = def.types.get(field);
 	if (!raw) return TUnknown;
-	if (raw.startsWith("[]")) return arrayType(namedType(raw.slice(2)));
-	if (raw.includes(" | ")) {
-		const arms = raw.split(" | ").map((s) => namedType(s.trim()));
-		return unionType(...arms);
-	}
-	return namedType(raw);
+	return parseDisplayType(raw);
 }
 
 function fnReturnType(
@@ -137,17 +124,9 @@ function fnReturnType(
 
 	const def = state.functions.get(funcName);
 	if (def?.returnType) {
-		if (def.returnType.startsWith("[]")) {
-			return arrayType(namedType(def.returnType.slice(2)));
-		}
-		if (def.returnType.includes(" | ")) {
-			return unionType(
-				...def.returnType.split(" | ").map((s) => namedType(s.trim())),
-			);
-		}
-		return namedType(def.returnType);
+		return parseDisplayType(def.returnType);
 	}
-	if (def?.ast.returnType) return typeFromAst(def.ast.returnType);
+	if (def?.ast.returnType) return typeFromAst(def.ast.returnType, state);
 	return TUnknown;
 }
 
@@ -174,7 +153,7 @@ function fnParamTypes(
 		let t: Type = TUnknown;
 		if (p.nodeName === "DeclarationNode") {
 			const d = p as ast.DeclarationExpression;
-			if (d.type) t = typeFromAst(d.type);
+			if (d.type) t = typeFromAst(d.type, state);
 			if (isVariadic && i === plist.length - 1) {
 				rest = t.kind === "array" ? t : arrayType(t.kind === "unknown" ? TUnknown : t);
 				continue;
@@ -271,8 +250,8 @@ function inferExpr(
 						["==", "!="].includes(op) &&
 						!involvesUnknown(l) &&
 						!involvesUnknown(r) &&
-						l.kind === "string" &&
-						r.kind === "string"
+						isByteSlice(l) &&
+						isByteSlice(r)
 					) {
 						return TBool;
 					}
@@ -291,10 +270,13 @@ function inferExpr(
 				// handled above for ==; + below
 			}
 			if (op === "+") {
-				if (l.kind === "string" || r.kind === "string") {
+				if (isByteSlice(l) || isByteSlice(r)) {
 					if (!involvesUnknown(l) && !involvesUnknown(r)) {
-						requireAssign(l, TString, "string +");
-						requireAssign(r, TString, "string +");
+						if (!isByteSlice(l) || !isByteSlice(r)) {
+							throw new TypeCheckError(
+								`string +: cannot concatenate '${displayType(l)}' and '${displayType(r)}'`,
+							);
+						}
 					}
 					return TString;
 				}
@@ -437,7 +419,6 @@ function inferExpr(
 			const i = inferExpr(state, env, idx.index);
 			if (!involvesUnknown(i)) requireAssign(i, TInt, "index");
 			if (obj.kind === "array") return obj.elem;
-			if (obj.kind === "string") return TInt; // char code
 			if (!involvesUnknown(obj) && obj.kind !== "unknown") {
 				throw new TypeCheckError(
 					`Cannot index type '${displayType(obj)}'`,
@@ -448,23 +429,51 @@ function inferExpr(
 
 		case "ArrayLiteral": {
 			const arr = node as ast.ArrayLiteral;
-			if (arr.elements.length === 0) return arrayType(TUnknown);
+			if (arr.elements.length === 0) return arrayType(TUnknown, 0);
 			const types = arr.elements.map((e) => inferExpr(state, env, e));
-			const first = types[0]!;
+			let elem = types[0]!;
 			for (let i = 1; i < types.length; i++) {
-				if (
-					!involvesUnknown(first) &&
-					!involvesUnknown(types[i]!) &&
-					!isSubtype(types[i]!, first)
-				) {
+				const ti = types[i]!;
+				if (involvesUnknown(elem) || involvesUnknown(ti)) {
+					if (elem.kind === "unknown") elem = ti;
+					continue;
+				}
+				// Nested arrays: unify lengths
+				if (elem.kind === "array" && ti.kind === "array") {
+					if (
+						elem.length !== null &&
+						ti.length !== null &&
+						elem.length !== ti.length
+					) {
+						throw new TypeCheckError(
+							`Array elements have inconsistent lengths [${elem.length}] vs [${ti.length}]`,
+						);
+					}
+					if (!isSubtype(ti.elem, elem.elem) && !isSubtype(elem.elem, ti.elem)) {
+						throw new TypeCheckError(
+							`Array elements have inconsistent types '${displayType(elem)}' and '${displayType(ti)}'`,
+						);
+					}
+					// Prefer sized length if one side has it
+					const len =
+						elem.length !== null ? elem.length : ti.length;
+					const inner =
+						isSubtype(ti.elem, elem.elem) ? elem.elem : ti.elem;
+					elem = arrayType(inner, len);
+					continue;
+				}
+				if (!isSubtype(ti, elem) && !isSubtype(elem, ti)) {
 					throw new TypeCheckError(
-						`Array elements have inconsistent types '${displayType(first)}' and '${displayType(types[i]!)}'`,
+						`Array elements have inconsistent types '${displayType(elem)}' and '${displayType(ti)}'`,
 					);
 				}
+				if (isSubtype(ti, elem)) {
+					/* keep elem */
+				} else {
+					elem = ti;
+				}
 			}
-			return arrayType(
-				types.every((t) => t.kind === "unknown") ? TUnknown : first,
-			);
+			return arrayType(elem, arr.elements.length);
 		}
 
 		case "StructInitialization": {
@@ -595,11 +604,10 @@ function checkStmt(
 				return null;
 			}
 			const valueType = inferExpr(state, env, decl.value);
-			const annot = decl.type ? typeFromAst(decl.type) : null;
+			const annot = decl.type ? typeFromAst(decl.type, state) : null;
 			if (annot) {
 				requireAssign(valueType, annot, `declaration of '${decl.name}'`);
 				define(env, decl.name, annot);
-				// Keep emit maps in sync
 				if (!decl.name.includes("::")) {
 					state.globalTypes.set(decl.name, displayType(annot));
 				}
@@ -653,7 +661,7 @@ function checkFunction(state: CompilerState, fn: ast.FunctionDeclaration) {
 		env.globals.set(name, TUnknown);
 	}
 
-	const annotated = fn.returnType ? typeFromAst(fn.returnType) : null;
+	const annotated = fn.returnType ? typeFromAst(fn.returnType, state) : null;
 	env.annotatedReturn = annotated;
 	env.expectedReturn = annotated;
 
@@ -664,7 +672,7 @@ function checkFunction(state: CompilerState, fn: ast.FunctionDeclaration) {
 		const p = params[i]!;
 		if (p.nodeName !== "DeclarationNode") continue;
 		const d = p as ast.DeclarationExpression;
-		let t = d.type ? typeFromAst(d.type) : TUnknown;
+		let t = d.type ? typeFromAst(d.type, state) : TUnknown;
 		if (d.name === "self" && fn.name.includes("::")) {
 			t = { kind: "struct", name: fn.name.split("::")[0]! };
 		}
@@ -692,7 +700,7 @@ function checkStructFieldTypes(state: CompilerState, s: ast.StructDeclaration) {
 	if (!def) return;
 	for (const field of s.fields) {
 		if (!field.type) continue;
-		const t = typeFromAst(field.type);
+		const t = typeFromAst(field.type, state);
 		def.types.set(field.name, displayType(t));
 	}
 }

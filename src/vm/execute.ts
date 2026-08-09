@@ -28,6 +28,8 @@ function assertValueType(state: VMState, val: Value, tag: number): boolean {
 			return typeof val === "number" && !isErrorValue(state, val);
 		case TypeTag.BOOL:
 			return typeof val === "boolean";
+		case TypeTag.BYTE:
+			return typeof val === "number" && !isErrorValue(state, val);
 		case TypeTag.STRING:
 			return typeof val === "string" || typeof val === "number";
 		case TypeTag.NULL:

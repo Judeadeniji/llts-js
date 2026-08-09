@@ -397,12 +397,14 @@ export class ExternDeclaration extends Node {
 	}
 }
 
-/** `[]T` in a type position. */
+/** `[]T` or `[N]T` in a type position. */
 export class ArrayTypeExpression extends Node {
 	override readonly nodeName = "ArrayTypeExpression";
 
 	constructor(
 		public elem: Node,
+		/** null = unsized slice `[]T`; number = fixed `[N]T`. */
+		public length: number | null = null,
 		override parent: Node | null = null,
 		location?: Location,
 	) {

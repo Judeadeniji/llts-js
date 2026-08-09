@@ -1,5 +1,6 @@
 // types
-import { resolveType } from "./types";
+import { isStringyType, resolveType } from "./types";
+import { involvesUnknown, isSubtype, parseDisplayType } from "./type-ir";
 // others
 import { OpCode } from "../bytecode";
 import { checkNotNull } from "../shared";
@@ -9,7 +10,13 @@ import { type CompilerState, currentChunk } from "./state";
 import { compileStatement } from "./statements";
 import type * as ast from "../ast";
 
-// ----------------------------------------------------------------------
+function emitTypesCompatible(expected: string, assigned: string): boolean {
+	if (expected === assigned) return true;
+	const e = parseDisplayType(expected);
+	const a = parseDisplayType(assigned);
+	if (involvesUnknown(e) || involvesUnknown(a)) return true;
+	return isSubtype(a, e);
+}
 
 export function tryResolveStaticPath(state: CompilerState, node: ast.Node): string | undefined {
 	if (node.nodeName === "PrimaryExpression") {
@@ -129,7 +136,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 
 						if (offset !== undefined) {
 							const assignedType = resolveType(state, assign.right);
-							if (expectedType && assignedType && expectedType !== assignedType) {
+							if (expectedType && assignedType && !emitTypesCompatible(expectedType, assignedType)) {
 								throw new Error(
 									`Type mismatch: cannot assign type '${assignedType}' to field '${propName}' of type '${expectedType}'`,
 								);
@@ -259,7 +266,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				case "+": {
 					const lType = resolveType(state, bin.left);
 					const rType = resolveType(state, bin.right);
-					if (lType === "string" || rType === "string") {
+					if (isStringyType(lType) || isStringyType(rType)) {
 						emitByte(state, OpCode.OP_STRING_ADD);
 					} else {
 						emitByte(state, OpCode.OP_ADD);
@@ -284,8 +291,8 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					break;
 				case "==":
 					if (
-						resolveType(state, bin.left) === "string" &&
-						resolveType(state, bin.right) === "string"
+						isStringyType(resolveType(state, bin.left)) &&
+						isStringyType(resolveType(state, bin.right))
 					) {
 						emitByte(state, OpCode.OP_STRING_EQUAL);
 					} else {
@@ -294,8 +301,8 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					break;
 				case "!=":
 					if (
-						resolveType(state, bin.left) === "string" &&
-						resolveType(state, bin.right) === "string"
+						isStringyType(resolveType(state, bin.left)) &&
+						isStringyType(resolveType(state, bin.right))
 					) {
 						emitByte(state, OpCode.OP_STRING_NOT_EQUAL);
 					} else {
@@ -368,7 +375,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					throw new Error(`Unknown field ${field.name}`);
 
 				const assignedType = resolveType(state, field.value);
-				if (expectedType && assignedType && expectedType !== assignedType) {
+				if (expectedType && assignedType && !emitTypesCompatible(expectedType, assignedType)) {
 					throw new Error(
 						`Type mismatch in struct initialization: cannot assign type '${assignedType}' to field '${field.name}' of type '${expectedType}'`,
 					);
