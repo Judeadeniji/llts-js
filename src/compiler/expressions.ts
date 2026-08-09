@@ -394,7 +394,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				if (staticPath.includes("::") && !state.functions.has(staticPath) && !state.globalVars.has(staticPath) && !state.globalConsts.has(staticPath) && !state.structs.has(staticPath) && !state.nativeGlobals.has(staticPath)) {
 					const modName = mem.object.nodeName === "PrimaryExpression" ? (mem.object as ast.PrimaryExpression).name : "Module";
 					const propName = mem.property.nodeName === "PrimaryExpression" ? (mem.property as ast.PrimaryExpression).name : "property";
-					throw new Error(`CompileError: '${modName}' has no function '${propName}'`);
+					throw new Error(`CompileError: '${modName}' has no export '${propName}'`);
 				}
 				const nameIdx = currentChunk(state).addConstant(staticPath);
 				if (state.functions.has(staticPath)) {

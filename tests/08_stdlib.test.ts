@@ -281,7 +281,7 @@ test("calling a module function that doesn't exist is a compile-time error", () 
   expectError(runSource(`
 @const $math = @import("math");
 print(math.notARealFunction(1));
-`), "CompileError: 'math' has no function 'notARealFunction'");
+`), "CompileError: 'math' has no export 'notARealFunction'");
 });
 
 test("using a module namespace without importing it is a compile-time error", () => {
