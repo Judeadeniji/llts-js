@@ -537,7 +537,10 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			if (funcName && state.functions.has(funcName) && checkNotNull(state.functions.get(funcName)).ast.body.statements.length > 0) {
 				const fnDef = checkNotNull(state.functions.get(funcName));
 
+				// Variadic functions must use CALL_STATIC so OP_PACK_REST can
+				// collapse trailing args into the rest local at runtime.
 				if (
+					fnDef.ast.params?.isVariadic ||
 					fnDef.hasLoop ||
 					fnDef.isRecursive ||
 					fnDef.ast.body.statements.length > 5 ||
