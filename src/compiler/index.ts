@@ -1,6 +1,6 @@
 // others
 import { type Chunk, OpCode } from "../bytecode";
-import { emitByte, emitJump, patchJump } from "./emit";
+import { emitByte, emitBytes, emitJump, patchJump } from "./emit";
 import { type CompilerState, createCompilerState } from "./state";
 import { compileFunction, compileStatement } from "./statements";
 import * as ast from "../ast";
@@ -303,6 +303,19 @@ export function compile(document: ast.DocumentBody): Chunk {
 		) {
 			compileStatement(state, stmt);
 		}
+	}
+
+	// Auto-invoke `main` when defined (entry point after top-level statements)
+	const mainDef = state.functions.get("main");
+	if (mainDef?.address !== undefined) {
+		emitBytes(
+			state,
+			OpCode.OP_CALL_STATIC,
+			mainDef.address >> 8,
+			mainDef.address & 0xff,
+			0,
+		);
+		emitByte(state, OpCode.OP_POP); // discard main's return value
 	}
 
 	// Emit halt for main script
