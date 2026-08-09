@@ -3,7 +3,7 @@
 std.debug.log(std);
 
 $input = std.io.readLine();
-std.debug.printLn("Received input: {i}", input);
+std.debug.printLn("Received input: {s}", input);
 
 $a = 5;
 $b = 3;

@@ -1,10 +1,23 @@
-@func readLine() {
-    # Since we don't have built-in user input primitives yet, this is a placeholder.
-    # In a full implementation, it would read from stdin.
-    return "example input";
+pub @func readLine() {
+    return __readLine();
 }
 
-@func readFile(path) {
-    # Placeholder for reading a file
-    return "file content mock";
+pub @func readFile(path) {
+    return __readFile(path);
+}
+
+pub @func writeFile(path, content) {
+    return __writeFile(path, content);
+}
+
+pub @func appendFile(path, content) {
+    return __appendFile(path, content);
+}
+
+pub @func deleteFile(path) {
+    return __deleteFile(path);
+}
+
+pub @func exists(path) {
+    return __exists(path);
 }

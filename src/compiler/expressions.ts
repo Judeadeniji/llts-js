@@ -2,11 +2,34 @@
 import { resolveType } from "./types";
 // others
 import { OpCode } from "../bytecode";
+import { checkNotNull } from "../shared";
 import { emitByte, emitBytes, emitConstant, emitJump, patchJump } from "./emit";
-import { beginScope, endScope, resolveVariable, resolveLocal } from "./scope";
+import { beginScope, endScope, resolveLocal, resolveVariable } from "./scope";
 import { type CompilerState, currentChunk } from "./state";
 import { compileStatement } from "./statements";
 import type * as ast from "../ast";
+
+// ----------------------------------------------------------------------
+
+export function tryResolveStaticPath(state: CompilerState, node: ast.Node): string | undefined {
+	if (node.nodeName === "PrimaryExpression") {
+		const prim = node as ast.PrimaryExpression;
+		if (prim.kind === "Identifier") {
+			const mod = state.globalTypes.get(`$${prim.name}`);
+			if (mod?.startsWith("module:")) return mod.replace("module:", "");
+		}
+	} else if (node.nodeName === "MemberExpression") {
+		const mem = node as ast.MemberExpression;
+		const objPath = tryResolveStaticPath(state, mem.object);
+		if (objPath) {
+			const prop = (mem.property as ast.PrimaryExpression).name;
+			const reExport = state.globalTypes.get(`$${objPath}::${prop}`);
+			if (reExport?.startsWith("module:")) return reExport.replace("module:", "");
+			return `${objPath}::${prop}`;
+		}
+	}
+	return undefined;
+}
 
 // ----------------------------------------------------------------------
 
@@ -16,6 +39,12 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			const lit = node as ast.LiteralExpression;
 			if (lit.literal_type === "number") {
 				emitConstant(state, parseFloat(lit.value));
+			} else if (lit.literal_type === "hex") {
+				emitConstant(state, parseInt(lit.value.slice(2), 16));
+			} else if (lit.literal_type === "binary") {
+				emitConstant(state, parseInt(lit.value.slice(2), 2));
+			} else if (lit.literal_type === "octal") {
+				emitConstant(state, parseInt(lit.value.slice(2), 8));
 			} else if (lit.literal_type === "string") {
 				const idx = currentChunk(state).addConstant(lit.value);
 				emitBytes(state, OpCode.OP_MAKE_STRING, idx);
@@ -24,27 +53,72 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					state,
 					lit.value === "true" ? OpCode.OP_TRUE : OpCode.OP_FALSE,
 				);
+			} else if (lit.literal_type === "null") {
+				emitByte(state, OpCode.OP_NULL);
 			}
 			break;
 		}
 		case "PrimaryExpression": {
 			const prim = node as ast.PrimaryExpression;
 			if (prim.kind === "Identifier" || prim.kind === "Register") {
+				const staticPath = tryResolveStaticPath(state, node);
+				if (staticPath) {
+					const nameIdx = currentChunk(state).addConstant(staticPath);
+					if (state.functions.has(staticPath)) {
+						emitBytes(state, OpCode.OP_GET_FUNCTION, nameIdx);
+					} else if (staticPath.endsWith(".lls")) {
+						emitBytes(state, OpCode.OP_GET_MODULE, nameIdx);
+					} else {
+						emitBytes(state, OpCode.OP_GET_GLOBAL, nameIdx);
+					}
+					break;
+				}
 				resolveVariable(state, prim.name);
 			}
 			break;
 		}
 		case "AssignmentExpression": {
 			const assign = node as ast.AssignmentExpression;
+
+			// Map compound operator → arithmetic opcode (undefined = plain =)
+			const compoundOp: Record<string, OpCode | undefined> = {
+				"+=": OpCode.OP_ADD,
+				"-=": OpCode.OP_SUB,
+				"*=": OpCode.OP_MUL,
+				"/=": OpCode.OP_DIV,
+				"%=": OpCode.OP_MOD,
+			};
+			const arithOp = compoundOp[assign.operator];
+
 			if (assign.left.nodeName === "IndexExpression") {
+				// arr[idx] = rhs  or  arr[idx] op= rhs
 				const idxExpr = assign.left as ast.IndexExpression;
-				compileExpression(state, idxExpr.object);
-				compileExpression(state, idxExpr.index);
-				compileExpression(state, assign.right);
+				// Pattern for SET_INDEX: [obj, idx, val] → val
+				// For compound: val = arr[idx] op rhs
+				// Emit: obj, idx, (obj[idx] op rhs) but we need obj+idx before the value.
+				// Since object/index are side-effect-free, double-emit is safe.
+				if (arithOp !== undefined) {
+					// [obj, idx, (GET(obj,idx) op rhs)]
+					compileExpression(state, idxExpr.object); // obj
+					compileExpression(state, idxExpr.index);  // obj, idx
+					// compute new value on top separately, then we need to re-push obj+idx
+					// Use the safe double-emit pattern:
+					compileExpression(state, idxExpr.object); // obj, idx, obj2
+					compileExpression(state, idxExpr.index);  // obj, idx, obj2, idx2
+					emitByte(state, OpCode.OP_GET_INDEX);      // obj, idx, currentVal
+					compileExpression(state, assign.right);    // obj, idx, currentVal, rhs
+					emitByte(state, arithOp);                  // obj, idx, newVal
+				} else {
+					compileExpression(state, idxExpr.object);
+					compileExpression(state, idxExpr.index);
+					compileExpression(state, assign.right);
+				}
 				emitByte(state, OpCode.OP_SET_INDEX);
+
 			} else if (assign.left.nodeName === "MemberExpression") {
 				const memExpr = assign.left as ast.MemberExpression;
 				const typeName = resolveType(state, memExpr.object);
+
 				if (typeName) {
 					const structDef = state.structs.get(typeName);
 					if (structDef && memExpr.property.nodeName === "PrimaryExpression") {
@@ -54,53 +128,90 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 
 						if (offset !== undefined) {
 							const assignedType = resolveType(state, assign.right);
-							if (
-								expectedType &&
-								assignedType &&
-								expectedType !== assignedType
-							) {
+							if (expectedType && assignedType && expectedType !== assignedType) {
 								throw new Error(
 									`Type mismatch: cannot assign type '${assignedType}' to field '${propName}' of type '${expectedType}'`,
 								);
 							}
 
-							compileExpression(state, memExpr.object);
-							const offsetIdx = currentChunk(state).addConstant(offset);
-							emitBytes(state, OpCode.OP_CONSTANT, offsetIdx);
-							compileExpression(state, assign.right);
+							if (arithOp !== undefined) {
+								// Struct field compound: [obj, offset, (obj[offset] op rhs)] → SET_INDEX
+								// obj and offset are side-effect-free — double-emit is safe.
+								compileExpression(state, memExpr.object);           // obj
+								const oi0 = currentChunk(state).addConstant(offset);
+								emitBytes(state, OpCode.OP_CONSTANT, oi0);          // obj, offset
+								compileExpression(state, memExpr.object);           // obj, offset, obj2
+								const oi1 = currentChunk(state).addConstant(offset);
+								emitBytes(state, OpCode.OP_CONSTANT, oi1);          // obj, offset, obj2, offset2
+								emitByte(state, OpCode.OP_GET_INDEX);               // obj, offset, currentVal
+								compileExpression(state, assign.right);             // obj, offset, currentVal, rhs
+								emitByte(state, arithOp);                           // obj, offset, newVal
+							} else {
+								compileExpression(state, memExpr.object);
+								const oi = currentChunk(state).addConstant(offset);
+								emitBytes(state, OpCode.OP_CONSTANT, oi);
+								compileExpression(state, assign.right);
+							}
 							emitByte(state, OpCode.OP_SET_INDEX);
 							return;
 						}
 					}
 				}
-				compileExpression(state, memExpr.object);
-				compileExpression(state, assign.right);
+
+				// Dynamic property assignment: obj.prop = rhs  or  obj.prop op= rhs
 				if (
 					memExpr.property.nodeName === "PrimaryExpression" &&
 					(memExpr.property as ast.PrimaryExpression).kind === "Identifier"
 				) {
-					const nameIdx = currentChunk(state).addConstant(
-						(memExpr.property as ast.PrimaryExpression).name,
-					);
-					emitBytes(state, OpCode.OP_SET_PROPERTY, nameIdx);
+					const propName = (memExpr.property as ast.PrimaryExpression).name;
+					if (arithOp !== undefined) {
+						// obj.prop op= rhs
+						// Stack pattern using DUP: [obj, obj] → GET_PROP → [obj, currentVal] → rhs → arithOp → [obj, newVal] → SET_PROP
+						compileExpression(state, memExpr.object); // obj
+						emitByte(state, OpCode.OP_DUP);           // obj, obj
+						const getIdx = currentChunk(state).addConstant(propName);
+						emitBytes(state, OpCode.OP_GET_PROPERTY, getIdx); // obj, currentVal
+						compileExpression(state, assign.right);   // obj, currentVal, rhs
+						emitByte(state, arithOp);                 // obj, newVal
+					} else {
+						compileExpression(state, memExpr.object); // obj
+						compileExpression(state, assign.right);   // obj, rhs
+					}
+					const setIdx = currentChunk(state).addConstant(propName);
+					emitBytes(state, OpCode.OP_SET_PROPERTY, setIdx);
 				}
-			} else {
-				compileExpression(state, assign.right);
-				if (assign.left.nodeName === "PrimaryExpression") {
-					const primLeft = assign.left as ast.PrimaryExpression;
-					if (primLeft.kind === "Identifier" || primLeft.kind === "Register") {
-						const arg = resolveLocal(state, primLeft.name);
-						if (arg !== -1) {
-							emitBytes(state, OpCode.OP_SET_LOCAL, arg);
-						} else {
-							const nameIdx = currentChunk(state).addConstant(primLeft.name);
-							emitBytes(state, OpCode.OP_SET_GLOBAL, nameIdx);
-						}
+
+			} else if (assign.left.nodeName === "PrimaryExpression") {
+				// Variable assignment: $a = rhs  or  a op= rhs
+				const primLeft = assign.left as ast.PrimaryExpression;
+				if (primLeft.kind === "Identifier" || primLeft.kind === "Register") {
+					const name = primLeft.name;
+					const localArg = resolveLocal(state, name);
+					const isConst = localArg !== -1 ? !!state.locals[localArg]?.isConst : state.globalConsts.has(name);
+					if (isConst) {
+						throw new Error(`CompileError: Cannot reassign to constant variable '${name}'`);
+					}
+
+					if (arithOp !== undefined) {
+						resolveVariable(state, primLeft.name); // push current value
+						compileExpression(state, assign.right);
+						emitByte(state, arithOp);
+					} else {
+						compileExpression(state, assign.right);
+					}
+					const arg = resolveLocal(state, primLeft.name);
+					if (arg !== -1) {
+						emitBytes(state, OpCode.OP_SET_LOCAL, arg);
+					} else {
+						const nameIdx = currentChunk(state).addConstant(primLeft.name);
+						emitBytes(state, OpCode.OP_SET_GLOBAL, nameIdx);
 					}
 				}
 			}
 			break;
 		}
+
+
 		case "BinaryExpression": {
 			const bin = node as ast.BinaryExpression;
 			if (bin.operator === "&&") {
@@ -144,9 +255,16 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			compileExpression(state, bin.right);
 
 			switch (bin.operator) {
-				case "+":
-					emitByte(state, OpCode.OP_ADD);
+				case "+": {
+					const lType = resolveType(state, bin.left);
+					const rType = resolveType(state, bin.right);
+					if (lType === "string" || rType === "string") {
+						emitByte(state, OpCode.OP_STRING_ADD);
+					} else {
+						emitByte(state, OpCode.OP_ADD);
+					}
 					break;
+				}
 				case "-":
 					emitByte(state, OpCode.OP_SUB);
 					break;
@@ -159,6 +277,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				case "%":
 					emitByte(state, OpCode.OP_MOD);
 					break;
+				case "^":
 				case "**":
 					emitByte(state, OpCode.OP_POW);
 					break;
@@ -222,9 +341,9 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			let structName = structInit.name;
 			if (structName.includes(".")) {
 				const parts = structName.split(".");
-				const modulePath = state.globalTypes.get("$" + parts[0]);
-				if (modulePath && modulePath.startsWith("module:")) {
-					structName = modulePath.replace("module:", "") + "::" + parts[1];
+				const modulePath = state.globalTypes.get(`$${parts[0]}`);
+				if (modulePath?.startsWith("module:")) {
+					structName = `${modulePath.replace("module:", "")}::${parts[1]}`;
 				}
 			}
 
@@ -268,13 +387,32 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 		}
 		case "MemberExpression": {
 			const mem = node as ast.MemberExpression;
+			
+			const staticPath = tryResolveStaticPath(state, node);
+			if (staticPath) {
+				if (staticPath.includes("::") && !state.functions.has(staticPath) && !state.globalVars.has(staticPath) && !state.globalConsts.has(staticPath) && !state.structs.has(staticPath) && !state.nativeGlobals.has(staticPath)) {
+					const modName = mem.object.nodeName === "PrimaryExpression" ? (mem.object as ast.PrimaryExpression).name : "Module";
+					const propName = mem.property.nodeName === "PrimaryExpression" ? (mem.property as ast.PrimaryExpression).name : "property";
+					throw new Error(`CompileError: '${modName}' has no function '${propName}'`);
+				}
+				const nameIdx = currentChunk(state).addConstant(staticPath);
+				if (state.functions.has(staticPath)) {
+					emitBytes(state, OpCode.OP_GET_FUNCTION, nameIdx);
+				} else if (staticPath.endsWith(".lls")) {
+					emitBytes(state, OpCode.OP_GET_MODULE, nameIdx);
+				} else {
+					emitBytes(state, OpCode.OP_GET_GLOBAL, nameIdx);
+				}
+				break;
+			}
+			
 			let typeName = resolveType(state, mem.object);
 			if (typeName) {
 				if (typeName.includes(".")) {
 					const parts = typeName.split(".");
-					const modulePath = state.globalTypes.get("$" + parts[0]);
-					if (modulePath && modulePath.startsWith("module:")) {
-						typeName = modulePath.replace("module:", "") + "::" + parts[1];
+					const modulePath = state.globalTypes.get(`$${parts[0]}`);
+					if (modulePath?.startsWith("module:")) {
+						typeName = `${modulePath.replace("module:", "")}::${parts[1]}`;
 					}
 				}
 
@@ -307,27 +445,32 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 		}
 		case "ArrayLiteral": {
 			const arr = node as ast.ArrayLiteral;
+			const length = arr.elements.length;
 
-			// Allocate memory for array elements
-			emitBytes(
-				state,
-				OpCode.OP_GET_GLOBAL,
-				currentChunk(state).addConstant("__alloc"),
-			);
-			emitBytes(
-				state,
-				OpCode.OP_CONSTANT,
-				currentChunk(state).addConstant(arr.elements.length),
-			);
+			// Allocate memory for array elements + 1 for length
+			emitBytes(state, OpCode.OP_GET_GLOBAL, currentChunk(state).addConstant("__alloc"));
+			emitBytes(state, OpCode.OP_CONSTANT, currentChunk(state).addConstant(length + 1));
 			emitBytes(state, OpCode.OP_CALL, 1);
 
-			for (let i = 0; i < arr.elements.length; i++) {
-				emitByte(state, OpCode.OP_DUP);
+			// ptr is on stack.
+			// write length to ptr[0]
+			emitByte(state, OpCode.OP_DUP);
+			emitBytes(state, OpCode.OP_CONSTANT, currentChunk(state).addConstant(0));
+			emitBytes(state, OpCode.OP_CONSTANT, currentChunk(state).addConstant(length));
+			emitByte(state, OpCode.OP_SET_INDEX);
+			emitByte(state, OpCode.OP_POP);
+
+			// add 1 to ptr so it points to the first element
+			emitBytes(state, OpCode.OP_CONSTANT, currentChunk(state).addConstant(1));
+			emitByte(state, OpCode.OP_ADD);
+
+			for (let i = 0; i < length; i++) {
+				emitByte(state, OpCode.OP_DUP); // [base, base]
 				const offsetIdx = currentChunk(state).addConstant(i);
-				emitBytes(state, OpCode.OP_CONSTANT, offsetIdx);
-				compileExpression(state, arr.elements[i]);
-				emitByte(state, OpCode.OP_SET_INDEX);
-				emitByte(state, OpCode.OP_POP);
+				emitBytes(state, OpCode.OP_CONSTANT, offsetIdx); // [base, base, i]
+				compileExpression(state, checkNotNull(arr.elements[i])); // [base, base, i, val]
+				emitByte(state, OpCode.OP_SET_INDEX); // [base, val]
+				emitByte(state, OpCode.OP_POP); // [base]
 			}
 			break;
 		}
@@ -345,6 +488,18 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				emitBytes(state, OpCode.OP_PRINT, call.args.length);
 				return;
 			}
+			// Handle builtin @isError
+			if (
+				call.callee.nodeName === "PrimaryExpression" &&
+				(call.callee as ast.PrimaryExpression).name === "@isError"
+			) {
+				if (call.args.length !== 1) {
+					throw new Error("@isError expects exactly 1 argument");
+				}
+				compileExpression(state, call.args[0] as ast.Node);
+				emitByte(state, OpCode.OP_IS_ERROR);
+				return;
+			}
 
 			let funcName = "";
 			if (call.callee.nodeName === "PrimaryExpression") {
@@ -355,9 +510,9 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				if (typeName) {
 					if (typeName.includes(".")) {
 						const parts = typeName.split(".");
-						const modulePath = state.globalTypes.get("$" + parts[0]);
-						if (modulePath && modulePath.startsWith("module:")) {
-							typeName = modulePath.replace("module:", "") + "::" + parts[1];
+						const modulePath = state.globalTypes.get(`$${parts[0]}`);
+						if (modulePath?.startsWith("module:")) {
+							typeName = `${modulePath.replace("module:", "")}::${parts[1]}`;
 						}
 					}
 					const structDef = state.structs.get(typeName);
@@ -372,31 +527,34 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				}
 			}
 
-			if (funcName) {
-				// DEBUG
-				if (!state.functions.has(funcName)) {
-					console.log(
-						"DEBUG: funcName not found in state.functions:",
-						funcName,
-					);
-					console.log(
-						"DEBUG: Available functions:",
-						Array.from(state.functions.keys()),
-					);
+			if (!funcName) {
+				const staticPath = tryResolveStaticPath(state, call.callee);
+				if (staticPath) {
+					funcName = staticPath;
 				}
 			}
 
-			if (funcName && state.functions.has(funcName)) {
-				const fnDef = state.functions.get(funcName)!;
-				
-				if (fnDef.hasLoop || fnDef.isRecursive || fnDef.ast.body.statements.length > 5) {
+			if (funcName && state.functions.has(funcName) && checkNotNull(state.functions.get(funcName)).ast.body.statements.length > 0) {
+				const fnDef = checkNotNull(state.functions.get(funcName));
+
+				if (
+					fnDef.hasLoop ||
+					fnDef.isRecursive ||
+					fnDef.ast.body.statements.length > 5 ||
+					fnDef.hasReturn
+				) {
 					// Static jump
 					for (const arg of call.args) {
 						compileExpression(state, arg);
 					}
 					if (fnDef.address !== undefined) {
-                        
-						emitBytes(state, OpCode.OP_CALL_STATIC, fnDef.address >> 8, fnDef.address & 0xff, call.args.length);
+						emitBytes(
+							state,
+							OpCode.OP_CALL_STATIC,
+							fnDef.address >> 8,
+							fnDef.address & 0xff,
+							call.args.length,
+						);
 					} else {
 						// Forward reference, patch later
 						const { emitJump } = require("./emit");
@@ -407,19 +565,23 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 						fnDef.forwardJumps.push(patch);
 					}
 				} else {
-					// Inline
 					// Push arguments to stack
 					for (const arg of call.args) {
 						compileExpression(state, arg);
+					}
+					
+					const params = fnDef.ast.params?.params || [];
+					const missingArgs = params.length - call.args.length;
+					for (let i = 0; i < missingArgs; i++) {
+						emitByte(state, OpCode.OP_NULL);
 					}
 
 					beginScope(state);
 
 					// Bind parameters to the arguments we just pushed
-					const params = fnDef.ast.params?.params || [];
 					for (let i = 0; i < params.length; i++) {
 						const p = params[i];
-						if (p.nodeName === "DeclarationNode") {
+						if (checkNotNull(p).nodeName === "DeclarationNode") {
 							const decl = p as ast.DeclarationExpression;
 							let pType: string | undefined;
 							if (decl.type && decl.type.nodeName === "PrimaryExpression") {
@@ -432,7 +594,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 								depth: state.scopeDepth,
 								typeName: pType,
 							});
-						} else if (p.nodeName === "PrimaryExpression") {
+						} else if (checkNotNull(p).nodeName === "PrimaryExpression") {
 							const prim = p as ast.PrimaryExpression;
 							let pType: string | undefined;
 							if (prim.name === "self" && funcName.includes("::")) {
@@ -452,13 +614,14 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 						compileStatement(state, stmt);
 					}
 
-					const jumps = state.inlineReturnJumps.pop()!;
+					endScope(state);
+					emitByte(state, OpCode.OP_NULL);
+
+					const jumps = checkNotNull(state.inlineReturnJumps.pop());
 					const { patchJump } = require("./emit");
 					for (const jump of jumps) {
 						patchJump(state, jump);
 					}
-
-					endScope(state);
 				}
 			} else {
 				// Dynamic call (native function)
@@ -487,42 +650,35 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			}
 			break;
 		}
+		case "ErrorExpression": {
+			const errorExpr = node as any; // ast.ErrorExpression
+			compileExpression(state, errorExpr.message);
+			emitByte(state, OpCode.OP_MAKE_ERROR);
+			break;
+		}
+		case "TryExpression": {
+			const tryExpr = node as any; // ast.TryExpression
+			const typeName = resolveType(state, tryExpr.expression);
+			if (typeName && !typeName.includes("error")) {
+				throw new Error(`CompileError: '?' operator used on non-error-union type '${typeName}'`);
+			}
+			compileExpression(state, tryExpr.expression);
+			// Stack: [value]
+			emitByte(state, OpCode.OP_DUP); // [value, value]
+			emitByte(state, OpCode.OP_IS_ERROR); // [value, isError]
+			const skipRet = emitJump(state, OpCode.OP_JUMP_IF_FALSE); // jumps if isError is false
+			
+			// --- If we are here, isError was TRUE. ---
+			emitByte(state, OpCode.OP_POP); // pop the true
+			emitByte(state, OpCode.OP_RETURN); // return the error value
+			
+			// --- If we jumped, isError was FALSE. ---
+			patchJump(state, skipRet);
+			emitByte(state, OpCode.OP_POP); // pop the false, leaving the value
+			break;
+		}
 		case "ImportNode": {
-			const importNode = node as ast.ImportNode;
-			let importPath = importNode.importPath;
-			if (importPath === "std") {
-				importPath = "std/index.lls";
-			} else if (!importPath.endsWith(".lls")) {
-				importPath += ".lls";
-			}
-			const fullPath = require("path").resolve(process.cwd(), importPath);
-			if (require("fs").existsSync(fullPath)) {
-				const source = require("fs").readFileSync(fullPath, "utf-8");
-				const parser = new (require("../parser").Parser)();
-				const doc = parser.parse(source, fullPath);
-				for (const stmt of doc.statements) {
-					if (stmt.nodeName === "StructDeclaration") {
-						const structDecl = stmt as ast.StructDeclaration;
-						if (structDecl.isPublic) {
-							const origName = structDecl.name;
-							structDecl.name = `${importNode.importPath}::${origName}`;
-
-							const currentSize = currentChunk(state).code.length;
-							compileStatement(state, structDecl);
-							currentChunk(state).code.length = currentSize;
-
-							structDecl.name = origName;
-						}
-					} else if (stmt.nodeName === "ImportNode") {
-						const currentSize = currentChunk(state).code.length;
-						compileStatement(state, stmt);
-						currentChunk(state).code.length = currentSize;
-					}
-				}
-			}
-
-			const nameIdx = currentChunk(state).addConstant(importNode.importPath);
-			emitBytes(state, OpCode.OP_IMPORT, nameIdx);
+			// Handled at compile time during module resolution phase
 			break;
 		}
 	}

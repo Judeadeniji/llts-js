@@ -31,7 +31,8 @@ print("Initializing Game...");
 hero |> printStatus;
 
 print("Moving hero across the map...");
-@for ($i = 0; i < 3; i = i + 1) {
+@for (0..3) |i| {
+    print("Loop", i);
     hero.move(10, 5);
 }
 

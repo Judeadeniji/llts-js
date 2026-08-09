@@ -1,6 +1,6 @@
 # Main entry point for the standard library
 
-$math = @import("std/math.lls");
-$debug = @import("std/debug.lls");
-$io = @import("std/io.lls");
-$mem = @import("std/mem.lls");
+pub @const $math = @import("std/math.lls");
+pub @const $debug = @import("std/debug.lls");
+pub @const $io = @import("std/io.lls");
+pub @const $mem = @import("std/mem.lls");

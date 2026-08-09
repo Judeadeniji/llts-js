@@ -1,5 +1,44 @@
 @const $std = @import("std");
 
+@func add(x: i32, y: i32): i32 {
+    return x + y;
+}
+
+# Returns `add` as a first-class function value
+@func getAdder(n: i32) {
+    return add;
+}
+
+@struct Builder {
+    value: int;
+
+    @func build(self) {
+        self.value = self.value + 1;
+        return self;
+    }
+
+    @func run(self) {
+        std.debug.printLn("builder result = {i}", self.value);
+        return self.value;
+    }
+}
+
+@func factory() {
+    return Builder { value: 10 };
+}
+
+@struct Iter {
+    value: int;
+
+    @func next(self) {
+        return add;
+    }
+}
+
+@func get() {
+    return Iter { value: 0 };
+}
+
 # literals + registers
 @const $msg = "Hello, LLTS!";
 $a = 10;
@@ -37,13 +76,17 @@ $p = std.debug.printLn;
 $q = std.debug.printLn("sum = {i}", a + b);
 $r = std.debug.printLn("calc = {i}", add(a, b) * c);
 
-# currying / call chaining
-$s = getAdder(1)(2);
+# currying / call chaining: getAdder returns `add` as a first-class function
+$s = getAdder(1)(2, 3);
+
+# method chaining: factory() returns Builder, .build() mutates and returns self, .run() prints
 $t = factory().build().run();
 
-# mixed madness (but legal)
+# mixed math via std
 $u = std.math.add(1, a + b * c);
-$v = (get().next())(a + b);
+
+# get() returns Iter, .next() returns `add` as a first-class function, called with (a, b)
+$v = (get().next())(a, b);
 
 # final side-effect call
 std.debug.printLn(

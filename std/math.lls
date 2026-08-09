@@ -1,27 +1,56 @@
-@func add(a, b) {
+pub @func add(a, b) {
     return a + b;
 }
 
-@func sub(a, b) {
+pub @func sub(a, b) {
     return a - b;
 }
 
-@func mul(a, b) {
+pub @func mul(a, b) {
     return a * b;
 }
 
-@func div(a, b) {
+pub @func div(a, b) {
     return a / b;
 }
 
-@func mod(a, b) {
+pub @func mod(a, b) {
     return a % b;
 }
 
-@func pow(a, b) {
-    return a ** b;
+pub @func pow(a, b) {
+    return __pow(a, b);
 }
 
-@func sqr(a) {
-    return a ** 2;
+pub @func sqr(a) {
+    return __pow(a, 2);
 }
+
+pub @func abs(a) {
+    @if (a < 0) { return -a; }
+    return a;
+}
+
+pub @func floor(a) {
+    return __floor(a);
+}
+
+pub @func ceil(a) {
+    return __ceil(a);
+}
+
+pub @func round(a) {
+    return __round(a);
+}
+
+pub @func sqrt(a) {
+    return __sqrt(a);
+}
+
+# min and max are variadic natives - declared with @extern so the compiler
+# knows they exist; the VM provides the implementation.
+pub @extern min;
+pub @extern max;
+
+pub @const $PI = 3.141592653589793;
+pub @const $E = 2.718281828459045;

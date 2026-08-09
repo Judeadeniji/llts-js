@@ -4,82 +4,104 @@ import type { CompilerKeywordToken, IToken } from "./scanner";
 // ----------------------------------------------------------------------
 
 export enum CompilerSymbols {
-    import = "import",
-    const = "const",
-    typeOf = "typeOf",
-    func = "func",
-    for = "for",
-    if = "if",
-    else = "else",
-    struct = "struct"
+	import = "import",
+	const = "const",
+	func = "func",
+	for = "for",
+	if = "if",
+	else = "else",
+	struct = "struct",
+	isError = "isError",
+	extern = "extern",
 }
 
 export enum Literals {
-    number = "number",
-    string = "string",
-    boolean = "boolean",
-    hex = "hex",
-    octal = "octal",
-    binary = "binary"
+	number = "number",
+	string = "string",
+	boolean = "boolean",
+	hex = "hex",
+	octal = "octal",
+	binary = "binary",
 }
 
 export enum BinOps {
-    add = "+",
-    sub = "-",
-    mul = "*",
-    div = "/",
-    mod = "%",
-    pow = "^",
-    eq = "==",
-    neq = "!=",
-    gt = ">",
-    gte = ">=",
-    lt = "<",
-    lte = "<=",
-    and = "&&",
-    or = "||",
-    sqr = "**",
-    pipe = "|>",
+	add = "+",
+	sub = "-",
+	mul = "*",
+	div = "/",
+	mod = "%",
+	pow = "^",
+	eq = "==",
+	neq = "!=",
+	gt = ">",
+	gte = ">=",
+	lt = "<",
+	lte = "<=",
+	and = "&&",
+	or = "||",
+	sqr = "**",
+	pipe = "|>",
+	range = "..",
 }
 
 export enum UnaryOps {
-    not = "!",
-    neg = "-",   // careful: '-' is overloaded
+	not = "!",
+	neg = "-", // careful: '-' is overloaded
 }
 
 export enum AssignOps {
-    assign = "=",
-    addAssign = "+=",
-    subAssign = "-=",
-    mulAssign = "*=",
-    divAssign = "/=",
-    modAssign = "%=",
-    powAssign = "^=",
-    andAssign = "&&=",
-    orAssign = "||="
+	assign = "=",
+	addAssign = "+=",
+	subAssign = "-=",
+	mulAssign = "*=",
+	divAssign = "/=",
+	modAssign = "%=",
+	powAssign = "^=",
+	andAssign = "&&=",
+	orAssign = "||=",
 }
 
 // TODO: ADD BITWISE OPERATORS
 
 export const PRECEDENCE: Record<string, number> = {
-    "=": 1,
-    "+=": 1, "-=": 1,
-    "||": 2,
-    "&&": 3,
-    "==": 4, "!=": 4,
-    ">": 5, ">=": 5, "<": 5, "<=": 5,
-    "+": 6, "-": 6, "|>": 6,
-    "*": 7, "/": 7, "%": 7, "**": 7,
-    "^": 8
+	"=": 1,
+	"+=": 1,
+	"-=": 1,
+	"||": 2,
+	"&&": 3,
+	"==": 4,
+	"!=": 4,
+	">": 5,
+	">=": 5,
+	"<": 5,
+	"<=": 5,
+	"+": 6,
+	"-": 6,
+	"|>": 6,
+	"*": 7,
+	"/": 7,
+	"%": 7,
+	"**": 7,
+	"^": 8,
+	"..": 9,
 };
-
 
 export type Operator = BinOps | UnaryOps | AssignOps;
 
 export function isCompilerKeyword(token: string) {
-    return token in CompilerSymbols;
+	return token in CompilerSymbols;
 }
 
-export function isCompilerKeywordToken(token: IToken): token is CompilerKeywordToken {
-    return token.type === "COMPILER_KEYWORD";
+export function isCompilerKeywordToken(
+	token: IToken,
+): token is CompilerKeywordToken {
+	return token.type === "COMPILER_KEYWORD";
+}
+
+export function checkNotNull<T>(
+	val: T,
+	msg: string = "Value is null or undefined",
+): NonNullable<T> {
+	if (val === null || val === undefined) throw new Error(msg);
+	return val as NonNullable<T>;
 }

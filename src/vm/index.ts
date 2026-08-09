@@ -1,25 +1,26 @@
 // others
 import { compile } from "../compiler/index";
+import type { CompilerState } from "../compiler/state";
 import { registerBuiltins } from "./builtins";
-import { execute, call } from "./execute";
+import { execute } from "./execute";
 import { createVMState, type VMState } from "./state";
-import * as ast from "../ast";
+import type * as ast from "../ast";
 
 // ----------------------------------------------------------------------
 
-export function run(document: ast.DocumentBody): VMState {
-    const chunk = compile(document);
-    
-    const state = createVMState(chunk);
-    registerBuiltins(state);
+export function run(document: ast.DocumentBody, parentState?: VMState): { vmState: VMState, compilerState: CompilerState } {
+	const { chunk, compilerState } = compile(document);
 
-    execute(state);
+	const state = createVMState(chunk, parentState);
+	registerBuiltins(state);
 
-    return state;
+	execute(state);
+
+	return { vmState: state, compilerState };
 }
 
 export class VM {
-    public run(document: ast.DocumentBody) {
-        run(document);
-    }
+	public run(document: ast.DocumentBody) {
+		run(document);
+	}
 }
