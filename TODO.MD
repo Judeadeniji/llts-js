@@ -103,7 +103,7 @@
 - [ ] **VM string encoding / byte heap type** — today strings are JS strings + heap `[len][charCode…]`; a real tagged byte buffer / unified encoding is later.
 - [ ] **Runtime-enforced fixed buffers** — `[N]T` is compile-time only; capacity traps / non-growing buffers later.
 - [ ] **UTF-8 vs code-unit length** — `len` / `[N]byte` inference currently use JS UTF-16 code units; revisit UTF-8 byte vs code-point policy later.
-- [ ] **Zig rewrite of compiler/VM** — port the language implementation to Zig; keep LLTS surface (arenas, defer, explicit alloc) close to that model so the JS prototype stays a rehearsal, not a GC detour.
+- [x] **Zig rewrite of compiler/VM** — Zig port lives under `zig/` (scanner → parser → compile → stack VM); JS prototype remains the reference. Incremental parity in progress.
 
 ---
 
