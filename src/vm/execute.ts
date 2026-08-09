@@ -1,5 +1,6 @@
 // others
 import { type LLTSFunction, NativeFunction, OpCode, type Value } from "../bytecode";
+import { TypeTag } from "../compiler/type-ir";
 import { checkNotNull } from "../shared";
 import { reportError } from "../scanner";
 import { peek, pop, push } from "./stack";
@@ -13,6 +14,34 @@ function runtimeError(state: VMState, message: string): never {
 	const line = state.currentLine || 1;
 	reportError(file, source, line, 1, message);
 	throw new Error(`RuntimeError: ${message}`);
+}
+
+function isErrorValue(state: VMState, val: Value): boolean {
+	if (typeof val !== "number") return false;
+	const header = state.memory[val - 1];
+	return header === 0xE2202;
+}
+
+function assertValueType(state: VMState, val: Value, tag: number): boolean {
+	switch (tag) {
+		case TypeTag.INT:
+			return typeof val === "number" && !isErrorValue(state, val);
+		case TypeTag.BOOL:
+			return typeof val === "boolean";
+		case TypeTag.STRING:
+			return typeof val === "string" || typeof val === "number";
+		case TypeTag.NULL:
+			return val === null;
+		case TypeTag.ERROR:
+			return isErrorValue(state, val);
+		case TypeTag.ERROR_UNION:
+			return true;
+		case TypeTag.ARRAY:
+		case TypeTag.STRUCT:
+			return typeof val === "number";
+		default:
+			return true;
+	}
 }
 
 export function execute(state: VMState, startIp: number = 0) {
@@ -34,6 +63,18 @@ export function execute(state: VMState, startIp: number = 0) {
 			case OpCode.OP_MARK_CONST: {
 				const slot = readByte();
 				frame.constSlots.add(slot);
+				break;
+			}
+			case OpCode.OP_ASSERT_TYPE: {
+				const tag = readByte();
+				const val = peek(state, 0);
+				const ok = assertValueType(state, val, tag);
+				if (!ok) {
+					runtimeError(
+						state,
+						`Type assertion failed: value does not match expected type tag ${tag}`,
+					);
+				}
 				break;
 			}
 			case OpCode.OP_CONSTANT:
@@ -224,7 +265,7 @@ export function execute(state: VMState, startIp: number = 0) {
 					}
 				}
 
-				if (instruction === OpCode.OP_STRING_NOT_EQUAL) {
+				if (op === OpCode.OP_STRING_NOT_EQUAL) {
 					push(state, !isEqual);
 				} else {
 					push(state, isEqual);

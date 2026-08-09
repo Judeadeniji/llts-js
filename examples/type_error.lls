@@ -1,7 +1,25 @@
+# Type system showcase — annotations, aliases, @typeOf, and structs.
+
 @struct Point {
     x: int;
     y: int;
 }
 
 $p = Point { x: 10, y: 20 };
-p.y = "this is a string!";
+$n: i32 = 42;
+$msg: string = "hello";
+$flags: boolean = true;
+$nums: []int = [1, 2, 3];
+
+print(@typeOf(p));
+print(@typeOf(n));
+print(@typeOf(msg));
+print(@typeOf(flags));
+print(@typeOf(nums));
+print(p.x);
+print(p.y);
+
+# Field assignment must match the declared type:
+#   p.y = "this is a string!";  # CompileError: string not assignable to int
+p.y = 99;
+print(p.y);

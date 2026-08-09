@@ -31,7 +31,9 @@ export type NodeTypes =
 	| "ContinueExpression"
 	| "TryExpression"
 	| "ErrorExpression"
-	| "ExternDeclaration";
+	| "ExternDeclaration"
+	| "ArrayTypeExpression"
+	| "UnionTypeExpression";
 
 export type PrimaryExpressions =
 	| "Literal"
@@ -140,7 +142,8 @@ export class FunctionDeclaration extends Node {
 		public name: string,
 		public params: Params,
 		public body: BlockExpression,
-		public returnType: string | null = null,
+		/** AST type node (Primary / ArrayType / UnionType), or null if unannotated. */
+		public returnType: Node | null = null,
 		override parent: Node | null = null,
 		location?: Location,
 	) {
@@ -387,6 +390,33 @@ export class ExternDeclaration extends Node {
 
 	constructor(
 		public name: string,
+		override parent: Node | null = null,
+		location?: Location,
+	) {
+		super(location);
+	}
+}
+
+/** `[]T` in a type position. */
+export class ArrayTypeExpression extends Node {
+	override readonly nodeName = "ArrayTypeExpression";
+
+	constructor(
+		public elem: Node,
+		override parent: Node | null = null,
+		location?: Location,
+	) {
+		super(location);
+	}
+}
+
+/** `T | U` in a type position (v1: mainly `T | error`). */
+export class UnionTypeExpression extends Node {
+	override readonly nodeName = "UnionTypeExpression";
+
+	constructor(
+		public left: Node,
+		public right: Node,
 		override parent: Node | null = null,
 		location?: Location,
 	) {

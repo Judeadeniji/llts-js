@@ -349,7 +349,7 @@ export function scan(source: string, path: string): ScanResult {
 				line,
 				column,
 			);
-		if (peek() === ":") handleTypeDecl();
+		// Emit register first; optional `: Type` is parsed by the parser (not TYPE_DECL).
 		tokens.push(new Token(startCol, line, "V_REGISTER", name));
 	};
 

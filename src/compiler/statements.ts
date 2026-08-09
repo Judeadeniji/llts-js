@@ -11,6 +11,8 @@ import {
 	patchJump,
 } from "./emit";
 import { compileExpression } from "./expressions";
+import { typeAstToDisplay, typeFromAst } from "./type-from-ast";
+import { typeTag } from "./type-ir";
 import { beginScope, endScope } from "./scope";
 import { type CompilerState, currentChunk } from "./state";
 import * as ast from "../ast";
@@ -33,12 +35,14 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 			compileExpression(state, decl.value);
 
 			let typeName: string | undefined;
-			if (
-				decl.type &&
-				decl.type.nodeName === "PrimaryExpression" &&
-				(decl.type as ast.PrimaryExpression).kind === "Identifier"
-			) {
-				typeName = (decl.type as ast.PrimaryExpression).name;
+			if (decl.type) {
+				typeName = typeAstToDisplay(decl.type);
+				if (state.debug) {
+					const tag = typeTag(typeFromAst(decl.type));
+					if (tag !== null) {
+						emitBytes(state, OpCode.OP_ASSERT_TYPE, tag);
+					}
+				}
 			} else if (decl.value.nodeName === "StructInitialization") {
 				typeName = (decl.value as ast.StructInitialization).name;
 			}
@@ -121,12 +125,8 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 
 			for (const field of structDecl.fields) {
 				offsets.set(field.name, size++);
-				if (
-					field.type &&
-					field.type.nodeName === "PrimaryExpression" &&
-					(field.type as ast.PrimaryExpression).kind === "Identifier"
-				) {
-					types.set(field.name, (field.type as ast.PrimaryExpression).name);
+				if (field.type) {
+					types.set(field.name, typeAstToDisplay(field.type) ?? "unknown");
 				}
 			}
 

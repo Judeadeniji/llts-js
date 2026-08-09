@@ -73,6 +73,8 @@ export enum OpCode {
 	OP_LINE,
 	// Mark local slot as const binding: [OP, slot]
 	OP_MARK_CONST,
+	// Debug type assert: [OP, type_tag] — peeks TOS, throws if mismatch
+	OP_ASSERT_TYPE,
 }
 
 export type Value =

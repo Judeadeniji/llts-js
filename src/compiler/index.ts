@@ -5,6 +5,8 @@ import { LLTSFunction, type Chunk, OpCode } from "../bytecode";
 import { Parser } from "../parser";
 import { emitByte, emitBytes, emitJump, patchJump } from "./emit";
 import { type CompilerState, createCompilerState } from "./state";
+import { typeAstToDisplay } from "./type-from-ast";
+import { typecheck } from "./typecheck";
 import { beginScope } from "./scope";
 import { compileFunction, compileStatement } from "./statements";
 import * as ast from "../ast";
@@ -26,7 +28,8 @@ function registerFunctions(state: CompilerState, document: ast.DocumentBody) {
 			// Analyze for loops and calls
 			let hasLoop = false;
 			let hasReturn = false;
-			let returnType: string | undefined = fn.returnType || undefined;
+			let returnType: string | undefined =
+				fn.returnType ? typeAstToDisplay(fn.returnType) : undefined;
 			const calls = new Set<string>();
 
 			const analyze = (n: ast.Node) => {
@@ -37,18 +40,18 @@ function registerFunctions(state: CompilerState, document: ast.DocumentBody) {
 					hasLoop = true;
 				} else if (n.nodeName === "ReturnExpression") {
 					hasReturn = true;
-					// Infer return type from struct literal returns
-					const ret = n as ast.ReturnExpression;
-					if (ret.returnValue?.nodeName === "StructInitialization") {
-						returnType = (ret.returnValue as ast.StructInitialization).name;
-					} else if (
-						ret.returnValue?.nodeName === "PrimaryExpression" &&
-						(ret.returnValue as ast.PrimaryExpression).name === "self" &&
-						fullName.includes("::")
-					) {
-						// `return self` inside a method → same struct type
-						// fullName is e.g. "Builder::build", so the struct is the part before "::"
-						returnType = fullName.split("::")[0];
+					// Infer return type only when the function has no annotation
+					if (!fn.returnType) {
+						const ret = n as ast.ReturnExpression;
+						if (ret.returnValue?.nodeName === "StructInitialization") {
+							returnType = (ret.returnValue as ast.StructInitialization).name;
+						} else if (
+							ret.returnValue?.nodeName === "PrimaryExpression" &&
+							(ret.returnValue as ast.PrimaryExpression).name === "self" &&
+							fullName.includes("::")
+						) {
+							returnType = fullName.split("::")[0];
+						}
 					}
 				}
 				if (n.nodeName === "CallExpression") {
@@ -254,8 +257,18 @@ function resolveImports(
 	document.statements = newStatements;
 }
 
-export function compile(document: ast.DocumentBody): { chunk: Chunk, compilerState: CompilerState } {
+export interface CompileOptions {
+	/** When true (default), emit OP_ASSERT_TYPE at typed boundaries. */
+	debug?: boolean;
+}
+
+export function compile(
+	document: ast.DocumentBody,
+	options: CompileOptions = {},
+): { chunk: Chunk, compilerState: CompilerState } {
+	const debug = options.debug !== false;
 	const state = createCompilerState();
+	state.debug = debug;
 	state.chunk.file = document.path || "<anonymous>";
 	state.chunk.source = document.source || "";
 
@@ -264,16 +277,20 @@ export function compile(document: ast.DocumentBody): { chunk: Chunk, compilerSta
 
 	// Phase 1: Register functions and compute call graph for recursion
 	registerFunctions(state, document);
-	// Phase 2: Compile main script statements
-	// We emit a jump over the static functions
-	const mainJump = emitJump(state, OpCode.OP_JUMP);
 
-	// Phase 1.5: Register structs
+	// Phase 1.5: Register structs (layout) before typecheck
 	for (const stmt of document.statements) {
 		if (stmt.nodeName === "StructDeclaration") {
 			compileStatement(state, stmt);
 		}
 	}
+
+	// Phase 1.75: Gradual typecheck
+	typecheck(state, document);
+
+	// Phase 2: Compile main script statements
+	// We emit a jump over the static functions
+	const mainJump = emitJump(state, OpCode.OP_JUMP);
 
 	// Compile all functions so they get an address (for dynamic calls / exports)
 	for (const [_name, def] of state.functions.entries()) {
@@ -326,7 +343,7 @@ export function compile(document: ast.DocumentBody): { chunk: Chunk, compilerSta
 }
 
 export class Compiler {
-	public compile(document: ast.DocumentBody): { chunk: Chunk, compilerState: CompilerState } {
-		return compile(document);
+	public compile(document: ast.DocumentBody, options?: CompileOptions): { chunk: Chunk, compilerState: CompilerState } {
+		return compile(document, options);
 	}
 }

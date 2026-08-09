@@ -46,6 +46,10 @@ export function resolveVariable(state: CompilerState, name: string) {
 		}
 
 		const nameIdx = currentChunk(state).addConstant(name);
-		emitBytes(state, OpCode.OP_GET_GLOBAL, nameIdx);
+		if (state.functions.has(name)) {
+			emitBytes(state, OpCode.OP_GET_FUNCTION, nameIdx);
+		} else {
+			emitBytes(state, OpCode.OP_GET_GLOBAL, nameIdx);
+		}
 	}
 }

@@ -12,6 +12,7 @@ export enum CompilerSymbols {
 	else = "else",
 	struct = "struct",
 	isError = "isError",
+	typeOf = "typeOf",
 	extern = "extern",
 }
 

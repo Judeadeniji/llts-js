@@ -48,6 +48,10 @@ export interface CompilerState {
 	inlineReturnJumps: number[][];
 	loops: LoopTracker[];
 	lastEmittedLine: number;
+	/** Emit OP_ASSERT_TYPE at typed boundaries when true. */
+	debug: boolean;
+	/** Static type display strings for `@typeOf` (filled by typecheck). */
+	typeOfResults: Map<ast.Node, string>;
 }
 
 export function createCompilerState(): CompilerState {
@@ -67,6 +71,8 @@ export function createCompilerState(): CompilerState {
 		inlineReturnJumps: [],
 		loops: [],
 		lastEmittedLine: -1,
+		debug: true,
+		typeOfResults: new Map(),
 	};
 
 	state.structs.set("string", {

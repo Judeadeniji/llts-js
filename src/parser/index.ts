@@ -26,6 +26,8 @@ import {
 	ErrorExpression,
 	TryExpression,
 	ExternDeclaration,
+	ArrayTypeExpression,
+	UnionTypeExpression,
 } from "../ast";
 import {
 	assert,
@@ -154,8 +156,11 @@ export class Parser {
 		switch (token.type) {
 			case "V_REGISTER": {
 				const nextToken = this.peek(1);
-				// `$name = ...` / `@const $name = ...` — declaration only
+				// `$name = ...` / `$name: Type = ...` / `@const $name ...` — declaration only
 				if (nextToken?.type === "ASSIGN_OP" && nextToken.value === "=") {
+					return this.parseDeclaration();
+				}
+				if (nextToken?.type === "DELIMITER" && nextToken.value === ":") {
 					return this.parseDeclaration();
 				}
 				this.rejectRegisterSigil(token, nextToken);
@@ -649,7 +654,7 @@ export class Parser {
 		}
 	}
 
-	// Handles "DEC var1, var2;"
+	// Handles "$name = ..." / "$name: Type = ..." / "@const $name ..."
 	private parseDeclaration(isConst = false) {
 		const register = checkNotNull(
 			this.consume(
@@ -657,33 +662,13 @@ export class Parser {
 				`Expected $RegisterName but found "${checkNotNull(this.peek()).value}" instead.`,
 			),
 		);
-		// next thing could be a type declaration
-		const peek = checkNotNull(this.peek());
-		switch (peek.type) {
-			case "TYPE_DECL":
-				return this.parseDeclarationWithType(register, isConst);
-			default:
-				return this.parseDeclarationWithoutType(register, isConst);
+
+		let typeNode: Node | undefined;
+		if (this.check("DELIMITER") && checkNotNull(this.peek()).value === ":") {
+			this.advance(); // ':'
+			typeNode = this.parseType();
 		}
-	}
 
-	private parseDeclarationWithType(register: Token, isConst: boolean) {
-		const value = this.parseStatement();
-		return new DeclarationExpression(
-			register.value,
-			value,
-			isConst,
-			null,
-			undefined,
-			{
-				column: register.column,
-				line: register.line,
-				path: checkNotNull(this.sourceFile?.name),
-			},
-		);
-	}
-
-	private parseDeclarationWithoutType(register: Token, isConst: boolean) {
 		this.consume("ASSIGN_OP", `Expected "=" after "${register.value}"`, "=");
 		const value = this.parseStatement();
 		const t = checkNotNull(this.peek());
@@ -697,13 +682,71 @@ export class Parser {
 			value,
 			isConst,
 			null,
-			undefined,
+			typeNode,
 			{
 				column: register.column,
 				line: register.line,
 				path: checkNotNull(this.sourceFile?.name),
 			},
 		);
+	}
+
+	/** Parse a type: `[]T`, `Name`, or `T | error` (and general `T | U`). */
+	private parseType(): Node {
+		const loc = () => ({
+			line: checkNotNull(this.peek()).line,
+			column: checkNotNull(this.peek()).column,
+			path: checkNotNull(this.sourceFile?.name),
+		});
+
+		let left: Node;
+		if (
+			this.check("DELIMITER") &&
+			checkNotNull(this.peek()).value === Delimiters.LEFT_BRACKET
+		) {
+			const start = checkNotNull(this.peek());
+			this.advance(); // '['
+			this.consume(
+				"DELIMITER",
+				"Expected ']' in array type '[]T'",
+				Delimiters.RIGHT_BRACKET,
+			);
+			const elem = this.parseTypeAtom();
+			left = new ArrayTypeExpression(elem, null, {
+				line: start.line,
+				column: start.column,
+				path: checkNotNull(this.sourceFile?.name),
+			});
+		} else {
+			left = this.parseTypeAtom();
+		}
+
+		while (this.check("DELIMITER") && checkNotNull(this.peek()).value === "|") {
+			this.advance();
+			const right = this.parseTypeAtom();
+			left = new UnionTypeExpression(left, right, null, loc());
+		}
+		return left;
+	}
+
+	private parseTypeAtom(): Node {
+		const peek = checkNotNull(this.peek());
+		if (peek.type === "KEYWORD" && peek.value === "error") {
+			this.advance();
+			return new PrimaryExpression("Identifier", "error", null, {
+				line: peek.line,
+				column: peek.column,
+				path: checkNotNull(this.sourceFile?.name),
+			});
+		}
+		const typeName = checkNotNull(
+			this.consume("IDENTIFIER", "Expected type name"),
+		);
+		return new PrimaryExpression("Identifier", typeName.value, null, {
+			line: typeName.line,
+			column: typeName.column,
+			path: checkNotNull(this.sourceFile?.name),
+		});
 	}
 
 	private parseParamsList(): { elements: Node[], isVariadic: boolean } {
@@ -728,14 +771,7 @@ export class Parser {
 			let typeNode: Node | undefined;
 			if (this.check("DELIMITER") && checkNotNull(this.peek()).value === ":") {
 				this.advance();
-				const typeName = this.consume("IDENTIFIER", "Expected type name");
-				if (typeName) {
-					typeNode = new PrimaryExpression("Identifier", typeName.value, null, {
-						line: typeName.line,
-						column: typeName.column,
-						path: checkNotNull(this.sourceFile?.name),
-					});
-				}
+				typeNode = this.parseType();
 			}
 
 			// Create a dummy value for the parameter declaration
@@ -798,14 +834,10 @@ export class Parser {
 			case CompilerSymbols.const:
 				return this.parseCompilerConst();
 			case CompilerSymbols.typeOf:
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					keyword.line,
-					keyword.column,
-					"@typeOf is not supported. Use explicit type annotations instead.",
-				);
-				process.exit(1);
+			case CompilerSymbols.isError:
+				// Expression-form builtins (`@typeOf(x)`, `@isError(x)`).
+				this.current--;
+				return this.parseExpressionStatement();
 			case CompilerSymbols.func:
 				return this.parseCompilerFunc();
 			case CompilerSymbols.for:
@@ -871,19 +903,7 @@ export class Parser {
 				Delimiters.COLON,
 			);
 
-			const typeName = checkNotNull(
-				this.consume("IDENTIFIER", "Expected type name"),
-			);
-			const fieldType = new PrimaryExpression(
-				"Identifier",
-				typeName.value,
-				null,
-				{
-					line: typeName.line,
-					column: typeName.column,
-					path: checkNotNull(this.sourceFile?.name),
-				},
-			);
+			const fieldType = this.parseType();
 
 			this.consume(
 				"DELIMITER",
@@ -1185,35 +1205,16 @@ export class Parser {
 		const params = new Params(parsedParams.elements);
 		params.isVariadic = parsedParams.isVariadic;
 
-		let fullReturnType: string | null = null;
+		let returnType: Node | null = null;
 		// check if return type
 		if (this.check("DELIMITER") && this.peek()?.value === ":") {
 			this.advance(); // eat ":"
-			// handle return types
-			const typeNameToken = this.consume("IDENTIFIER", "Expected type name");
-			if (!typeNameToken) {
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					this.previous()?.line ?? 0,
-					this.previous()?.column ?? 0,
-					`Expected a valid type name instead.`,
-				);
-				process.exit(1);
-			}
-			fullReturnType = typeNameToken.value;
-
-			// optionally allow `| error`
-			if (this.check("DELIMITER") && this.peek()?.value === "|") {
-				this.advance();
-				this.consume("KEYWORD", "Expected 'error' after '|'", "error");
-				fullReturnType += " | error";
-			}
+			returnType = this.parseType();
 		}
 
 		const body = this.parseBlock();
 
-		const func = new FunctionDeclaration(name.value, params, body, fullReturnType, null, {
+		const func = new FunctionDeclaration(name.value, params, body, returnType, null, {
 			line: name.line,
 			column: name.column,
 			path: checkNotNull(this.sourceFile?.name),

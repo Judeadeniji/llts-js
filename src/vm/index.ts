@@ -1,5 +1,5 @@
 // others
-import { compile } from "../compiler/index";
+import { compile, type CompileOptions } from "../compiler/index";
 import type { CompilerState } from "../compiler/state";
 import { registerBuiltins } from "./builtins";
 import { execute } from "./execute";
@@ -8,8 +8,12 @@ import type * as ast from "../ast";
 
 // ----------------------------------------------------------------------
 
-export function run(document: ast.DocumentBody, parentState?: VMState): { vmState: VMState, compilerState: CompilerState } {
-	const { chunk, compilerState } = compile(document);
+export function run(
+	document: ast.DocumentBody,
+	parentState?: VMState,
+	options?: CompileOptions,
+): { vmState: VMState, compilerState: CompilerState } {
+	const { chunk, compilerState } = compile(document, options);
 
 	const state = createVMState(chunk, parentState);
 	registerBuiltins(state);
@@ -20,7 +24,7 @@ export function run(document: ast.DocumentBody, parentState?: VMState): { vmStat
 }
 
 export class VM {
-	public run(document: ast.DocumentBody) {
-		run(document);
+	public run(document: ast.DocumentBody, options?: CompileOptions) {
+		run(document, undefined, options);
 	}
 }

@@ -501,6 +501,23 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 				emitByte(state, OpCode.OP_IS_ERROR);
 				return;
 			}
+			// Handle builtin @typeOf — compile-time type reflection as a string
+			if (
+				call.callee.nodeName === "PrimaryExpression" &&
+				(call.callee as ast.PrimaryExpression).name === "@typeOf"
+			) {
+				if (call.args.length !== 1) {
+					throw new Error("@typeOf expects exactly 1 argument");
+				}
+				const arg = call.args[0] as ast.Node;
+				// Evaluate for side effects, then discard; push static type name.
+				compileExpression(state, arg);
+				emitByte(state, OpCode.OP_POP);
+				const display = state.typeOfResults.get(call) ?? "unknown";
+				const idx = currentChunk(state).addConstant(display);
+				emitBytes(state, OpCode.OP_MAKE_STRING, idx);
+				return;
+			}
 
 			let funcName = "";
 			if (call.callee.nodeName === "PrimaryExpression") {

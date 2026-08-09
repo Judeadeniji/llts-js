@@ -73,8 +73,11 @@
 
 ### P4 — Type System
 
-- [ ] **Type checker pass** — a semantic analysis phase that verifies parameter types, return types, and struct field types before bytecode emission.
-- [ ] **Return type annotations enforced** — `@func foo(): Builder` declares the return type; compiler verifies it matches the inferred `returnType`.
+- [x] **Type checker pass** — gradual semantic analysis before bytecode emission (`src/compiler/typecheck.ts`).
+- [x] **Return / param / field annotations enforced** when present; unannotated = `Unknown`.
+- [x] **`$name: T`**, `[]T`, structured `T | error`; aliases `i32`/`number`→`int`, `boolean`→`bool`.
+- [x] **Debug `OP_ASSERT_TYPE`** at typed boundaries; strip with `--release`.
+- [x] **`@typeOf(expr)`** — compile-time type reflection as a `string` (print with `print(@typeOf(x))`).
 - [ ] **`pub` for user files** — cross-file visibility for user-defined modules (same `pub` mechanism as any library).
 
 ### P5 — Memory
@@ -93,4 +96,3 @@
 
 - `@while` loops: removed completely (use `@for` with a condition instead).
 - C-style `@for ($i=0; i<N; i=i+1)`: not planned; use `@for (0..N) |i|`.
-- `@typeOf`: removed (not useful without a type checker; use explicit annotations).
