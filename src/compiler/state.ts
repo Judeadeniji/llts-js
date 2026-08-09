@@ -61,7 +61,7 @@ export function createCompilerState(): CompilerState {
 		globalVars: new Set(),
 		nativeGlobals: new Set([
 			// Core language builtins — provided by the VM unconditionally
-			"print", "error",
+			"print", "error", "len",
 		]),
 		inlineReturnJumps: [],
 		loops: [],

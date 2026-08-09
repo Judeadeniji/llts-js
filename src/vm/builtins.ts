@@ -18,6 +18,18 @@ export function registerBuiltins(state: VMState) {
 		return null;
 	});
 
+	// Heap slices/arrays/strings store length at ptr-1; len(ptr) reads it.
+	defineNative(state, "len", (...args: Value[]) => {
+		if (args.length !== 1) {
+			throw new Error("len() expects exactly 1 argument");
+		}
+		const ptr = args[0] as number;
+		if (typeof ptr !== "number") {
+			throw new Error("len() expects an array, slice, or string");
+		}
+		return state.memory[ptr - 1] as number;
+	});
+
 	defineNative(state, "__printLn", (...args: Value[]) => {
 		const ptr = args[0] as number;
 		const len = state.memory[ptr - 1] as number;

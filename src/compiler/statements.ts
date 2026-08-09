@@ -287,15 +287,18 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 
 				const loopStart = currentChunk(state).code.length;
 
-				// Condition: .i < length (memory[.iterable - 1])
+				// Condition: .i < len(iterable)
 				emitByte(state, OpCode.OP_GET_LOCAL);
 				emitByte(state, iIndex);
 
-				// Get length: memory[.iterable - 1]
+				emitBytes(
+					state,
+					OpCode.OP_GET_GLOBAL,
+					currentChunk(state).addConstant("len"),
+				);
 				emitByte(state, OpCode.OP_GET_LOCAL);
 				emitByte(state, iterableIdx);
-				emitConstant(state, -1);
-				emitByte(state, OpCode.OP_GET_INDEX);
+				emitBytes(state, OpCode.OP_CALL, 1);
 
 				emitByte(state, OpCode.OP_LESS);
 

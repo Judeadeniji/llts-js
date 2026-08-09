@@ -56,6 +56,23 @@ export class Parser {
 	private sourceFile?: Bun.BunFile;
 	private source: string = "";
 
+	/** `$name` is declaration-only; uses and assignments omit the sigil. */
+	private rejectRegisterSigil(token: Token, next?: Token | null): never {
+		const name = token.value;
+		const hint =
+			next?.type === "ASSIGN_OP"
+				? `write '${name} ${next.value} ...' without '$'`
+				: `write '${name}' without '$'`;
+		reportError(
+			checkNotNull(this.sourceFile?.name),
+			this.source,
+			token.line,
+			token.column,
+			`'$' is only used in declarations (@const $name / $name = ...); ${hint}`,
+		);
+		process.exit(1);
+	}
+
 	// 1. HELPER: Look at current token without consuming
 	private peek(step = 0): Token | null {
 		return this.tokens[this.current + step] || null;
@@ -137,9 +154,11 @@ export class Parser {
 		switch (token.type) {
 			case "V_REGISTER": {
 				const nextToken = this.peek(1);
-				if (!nextToken) return this.parseDeclaration();
-				if (nextToken.type === "ASSIGN_OP") return this.parseDeclaration();
-				return this.parseExpressionStatement();
+				// `$name = ...` / `@const $name = ...` — declaration only
+				if (nextToken?.type === "ASSIGN_OP" && nextToken.value === "=") {
+					return this.parseDeclaration();
+				}
+				this.rejectRegisterSigil(token, nextToken);
 			}
 			case "BIN_OP":
 			case "UNARY_OP":
@@ -499,12 +518,8 @@ export class Parser {
 			}
 
 			case "V_REGISTER":
-				this.advance();
-				return new PrimaryExpression("Register", token.value, null, {
-					column: token.column,
-					line: token.line,
-					path: this.sourceFile?.name ?? "unknown",
-				});
+				this.rejectRegisterSigil(token, this.peek(1));
+				break;
 
 			case "DELIMITER":
 				if (token.value === Delimiters.LEFT_PAREN) {

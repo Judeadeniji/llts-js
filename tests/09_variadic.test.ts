@@ -45,10 +45,10 @@ print(join(100, 20, 3));
 test("empty rest packs a zero-length array", () => {
 	expectOutput(
 		runSource(`
-@func len(...args) {
-    return args[-1];
+@func argc(...args) {
+    return len(args);
 }
-print(len());
+print(argc());
 `),
 		["0"],
 	);

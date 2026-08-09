@@ -31,8 +31,8 @@ test("string operations: edge cases", () => {
 print(string.len(""));
 print(string.indexOf("Hello", "xyz"));
 print(string.substr("Hello", 2, 0));
-print(string.split("no-delim-here", ",").length);
-print(string.split("", ",").length);
+print(len(string.split("no-delim-here", ",")));
+print(len(string.split("", ",")));
 `),
     ["0", "-1", "", "1", "1"],
   );

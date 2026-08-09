@@ -75,6 +75,11 @@ export function execute(state: VMState, startIp: number = 0) {
 			case OpCode.OP_GET_INDEX: {
 				const index = pop(state) as number;
 				const ptr = pop(state) as number;
+				if (index < 0) {
+					throw new Error(
+						"RuntimeError: Array index must be >= 0; use len(arr) for the length",
+					);
+				}
 				push(state, checkNotNull(state.memory[ptr + index]));
 				break;
 			}
@@ -82,6 +87,11 @@ export function execute(state: VMState, startIp: number = 0) {
 				const value = pop(state) as number;
 				const index = pop(state) as number;
 				const ptr = pop(state) as number;
+				if (index < 0) {
+					throw new Error(
+						"RuntimeError: Array index must be >= 0; use len(arr) for the length",
+					);
+				}
 				state.memory[ptr + index] = value;
 				push(state, value);
 				break;
@@ -115,10 +125,6 @@ export function execute(state: VMState, startIp: number = 0) {
 					if (state.memory[obj - 1] === 0xE2202 && propName === "message") {
 						const msgPtr = state.memory[obj] as number;
 						push(state, msgPtr);
-						break;
-					}
-					if (propName === "length") {
-						push(state, state.memory[obj - 1] as number);
 						break;
 					}
 				}
