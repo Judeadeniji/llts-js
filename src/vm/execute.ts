@@ -1,19 +1,32 @@
 // others
 import { type LLTSFunction, NativeFunction, OpCode, type Value } from "../bytecode";
 import { TypeTag } from "../compiler/type-ir";
+import {
+	formatVmStackTrace,
+	ReportedError,
+	reportSourceError,
+	reportStackTrace,
+} from "../errors";
 import { checkNotNull } from "../shared";
-import { reportError } from "../scanner";
 import { peek, pop, push } from "./stack";
 import type { VMState } from "./state";
 
 // ----------------------------------------------------------------------
 
+function functionNameAt(state: VMState, address: number): string {
+	for (const [name, fn] of state.chunk.functions) {
+		if (fn.address === address) return name;
+	}
+	return "<script>";
+}
+
 function runtimeError(state: VMState, message: string): never {
 	const file = state.chunk.file || "<anonymous>";
 	const source = state.chunk.source || "";
 	const line = state.currentLine || 1;
-	reportError(file, source, line, 1, message);
-	throw new Error(`RuntimeError: ${message}`);
+	reportSourceError(file, source, line, 1, message);
+	reportStackTrace(formatVmStackTrace(state.frames, file, line));
+	throw new ReportedError(`RuntimeError: ${message}`, "RuntimeError");
 }
 
 function isErrorValue(state: VMState, val: Value): boolean {
@@ -60,6 +73,7 @@ export function execute(state: VMState, startIp: number = 0) {
 		switch (op) {
 			case OpCode.OP_LINE: {
 				state.currentLine = readShort();
+				frame.line = state.currentLine;
 				break;
 			}
 			case OpCode.OP_MARK_CONST: {
@@ -470,6 +484,8 @@ export function execute(state: VMState, startIp: number = 0) {
 						baseSlot: state.stack.length - argCount,
 						argCount,
 						constSlots: new Set(),
+						funcName: func.name,
+						line: state.currentLine,
 					};
 					state.frames.push(frame);
 					if (state.frames.length > 256)
@@ -524,6 +540,8 @@ export function execute(state: VMState, startIp: number = 0) {
 					baseSlot: state.stack.length - argCount,
 					argCount,
 					constSlots: new Set(),
+					funcName: functionNameAt(state, address),
+					line: state.currentLine,
 				};
 				state.frames.push(frame);
 				if (state.frames.length > 256)
@@ -582,7 +600,9 @@ export function execute(state: VMState, startIp: number = 0) {
 					}
 					return arg;
 				});
-				console.log(...formattedArgs);
+				process.stdout.write(
+					`${formattedArgs.map(String).join(" ")}\n`,
+				);
 				push(state, null);
 				break;
 			}

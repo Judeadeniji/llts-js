@@ -600,92 +600,25 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			if (funcName && state.functions.has(funcName) && checkNotNull(state.functions.get(funcName)).ast.body.statements.length > 0) {
 				const fnDef = checkNotNull(state.functions.get(funcName));
 
-				// Variadic functions must use CALL_STATIC so OP_PACK_REST can
-				// collapse trailing args into the rest local at runtime.
-				if (
-					fnDef.ast.params?.isVariadic ||
-					fnDef.hasLoop ||
-					fnDef.isRecursive ||
-					fnDef.ast.body.statements.length > 5 ||
-					fnDef.hasReturn
-				) {
-					// Static jump
-					for (const arg of call.args) {
-						compileExpression(state, arg);
-					}
-					if (fnDef.address !== undefined) {
-						emitBytes(
-							state,
-							OpCode.OP_CALL_STATIC,
-							fnDef.address >> 8,
-							fnDef.address & 0xff,
-							call.args.length,
-						);
-					} else {
-						// Forward reference, patch later
-						const patch = emitJump(state, OpCode.OP_CALL_STATIC);
-						emitByte(state, call.args.length);
-						// Store the patch somewhere to be resolved
-						if (!fnDef.forwardJumps) fnDef.forwardJumps = [];
-						fnDef.forwardJumps.push(patch);
-					}
+				// Always CALL_STATIC for user functions so runtime errors get real
+				// LLTS stack frames (call-site bytecode inlining hid callees).
+				for (const arg of call.args) {
+					compileExpression(state, arg);
+				}
+				if (fnDef.address !== undefined) {
+					emitBytes(
+						state,
+						OpCode.OP_CALL_STATIC,
+						fnDef.address >> 8,
+						fnDef.address & 0xff,
+						call.args.length,
+					);
 				} else {
-					// Push arguments to stack
-					for (const arg of call.args) {
-						compileExpression(state, arg);
-					}
-					
-					const params = fnDef.ast.params?.params || [];
-					const missingArgs = params.length - call.args.length;
-					for (let i = 0; i < missingArgs; i++) {
-						emitByte(state, OpCode.OP_NULL);
-					}
-
-					beginScope(state);
-
-					// Bind parameters to the arguments we just pushed
-					for (let i = 0; i < params.length; i++) {
-						const p = params[i];
-						if (checkNotNull(p).nodeName === "DeclarationNode") {
-							const decl = p as ast.DeclarationExpression;
-							let pType: string | undefined;
-							if (decl.type && decl.type.nodeName === "PrimaryExpression") {
-								pType = (decl.type as ast.PrimaryExpression).name;
-							} else if (decl.name === "self" && funcName.includes("::")) {
-								pType = funcName.slice(0, funcName.lastIndexOf("::"));
-							}
-							state.locals.push({
-								name: decl.name,
-								depth: state.scopeDepth,
-								typeName: pType,
-							});
-						} else if (checkNotNull(p).nodeName === "PrimaryExpression") {
-							const prim = p as ast.PrimaryExpression;
-							let pType: string | undefined;
-							if (prim.name === "self" && funcName.includes("::")) {
-								pType = funcName.slice(0, funcName.lastIndexOf("::"));
-							}
-							state.locals.push({
-								name: prim.name,
-								depth: state.scopeDepth,
-								typeName: pType,
-							});
-						}
-					}
-
-					state.inlineReturnJumps.push([]);
-
-					for (const stmt of fnDef.ast.body.statements) {
-						compileStatement(state, stmt);
-					}
-
-					endScope(state);
-					emitByte(state, OpCode.OP_NULL);
-
-					const jumps = checkNotNull(state.inlineReturnJumps.pop());
-					for (const jump of jumps) {
-						patchJump(state, jump);
-					}
+					// Forward reference, patch later
+					const patch = emitJump(state, OpCode.OP_CALL_STATIC);
+					emitByte(state, call.args.length);
+					if (!fnDef.forwardJumps) fnDef.forwardJumps = [];
+					fnDef.forwardJumps.push(patch);
 				}
 			} else {
 				// Dynamic call (native function)

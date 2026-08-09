@@ -34,7 +34,6 @@ import {
 	assert,
 	Delimiters,
 	Keywords,
-	reportError,
 	scan,
 	type Token,
 	type TokenType,
@@ -49,6 +48,7 @@ import {
 	PRECEDENCE,
 	type UnaryOps,
 } from "../shared";
+import { ReportedError, reportLocationFrame, reportSourceError } from "../errors";
 import type fs from "node:fs";
 
 // ----------------------------------------------------------------------
@@ -59,6 +59,18 @@ export class Parser {
 	private sourceFile?: Bun.BunFile;
 	private source: string = "";
 
+	/** Report source context + location frame, then abort parse. */
+	private failAtLoc(line: number, column: number, message: string): never {
+		const path = this.sourceFile?.name ?? "<anonymous>";
+		reportSourceError(path, this.source, line, column, message);
+		reportLocationFrame(path, line);
+		throw new ReportedError(`ParseError: ${message}`, "ParseError");
+	}
+
+	private failAt(token: Token, message: string): never {
+		return this.failAtLoc(token.line, token.column, message);
+	}
+
 	/** `$name` is declaration-only; uses and assignments omit the sigil. */
 	private rejectRegisterSigil(token: Token, next?: Token | null): never {
 		const name = token.value;
@@ -66,14 +78,10 @@ export class Parser {
 			next?.type === "ASSIGN_OP"
 				? `write '${name} ${next.value} ...' without '$'`
 				: `write '${name}' without '$'`;
-		reportError(
-			checkNotNull(this.sourceFile?.name),
-			this.source,
-			token.line,
-			token.column,
+		this.failAt(
+			token,
 			`'$' is only used in declarations (@const $name / $name = ...); ${hint}`,
 		);
-		process.exit(1);
 	}
 
 	// 1. HELPER: Look at current token without consuming
@@ -90,14 +98,9 @@ export class Parser {
 	private consume(type: TokenType, message: string, value?: string) {
 		if (value) {
 			const t = checkNotNull(this.peek());
-			assert(
-				checkNotNull(this.sourceFile?.name),
-				this.source,
-				(t.value === value && this.check(type)) || t.type === "EOF",
-				message,
-				t.line,
-				t.column,
-			);
+			if (!((t.value === value && this.check(type)) || t.type === "EOF")) {
+				this.failAt(t, message);
+			}
 			return this.advance();
 		}
 
@@ -107,7 +110,7 @@ export class Parser {
 
 		const next = this.peek();
 		if (!next) return null;
-		throw new Error(`${message} at line ${next.line}`);
+		this.failAt(next, message);
 	}
 
 	private check(type: TokenType): boolean {
@@ -209,15 +212,7 @@ export class Parser {
 				if (token.value === "true" || token.value === "false" || token.value === "error" || token.value === "null")
 					return this.parseExpressionStatement();
 
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					token.line,
-					token.column,
-					`Unexpected keyword: ${token.value}`,
-				);
-				process.exit(1);
-				break;
+				this.failAt(token, `Unexpected keyword: ${token.value}`);
 
 			case "COMPILER_KEYWORD":
 				return this.parseCompilerKeyword();
@@ -227,25 +222,15 @@ export class Parser {
 					token.value === Delimiters.LEFT_BRACKET
 				)
 					return this.parseExpressionStatement();
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					token.line,
-					token.column,
+				this.failAt(
+					token,
 					`Unexpected token: ${token.value} at line ${token.line}`,
 				);
-				process.exit(1);
-				break;
 			default:
-				console.error("FAILING ON TOKEN:", token);
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					token.line,
-					token.column,
+				this.failAt(
+					token,
 					`Unexpected token: ${token.value} at line ${token.line}`,
 				);
-				process.exit(1);
 		}
 	}
 
@@ -433,14 +418,11 @@ export class Parser {
 			expr.property instanceof PrimaryExpression
 		)
 			return `${this.exprToString(expr.object)}.${expr.property.name}`;
-		reportError(
-			checkNotNull(this.sourceFile?.name),
-			this.source,
+		this.failAtLoc(
 			checkNotNull(expr.loc?.line),
 			checkNotNull(expr.loc?.column),
 			"Invalid struct name expression",
 		);
-		process.exit(1);
 	}
 
 	private finishCall(callee: Node): Node {
@@ -563,7 +545,8 @@ export class Parser {
 				}
 		}
 
-		throw new Error(
+		this.failAt(
+			token,
 			`Unexpected token in expression: ${token.value} at line ${token.line}`,
 		);
 	}
@@ -645,14 +628,7 @@ export class Parser {
 					},
 				);
 			default:
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					token.line,
-					token.column,
-					`Invalid literal "${token.value}"`,
-				);
-				process.exit(1);
+				this.failAt(token, `Invalid literal "${token.value}"`);
 		}
 	}
 
@@ -717,14 +693,7 @@ export class Parser {
 				else if (numTok.type === "OCTAL") length = parseInt(raw.slice(2), 8);
 				else length = parseInt(raw, 10);
 				if (!Number.isFinite(length) || length < 0) {
-					reportError(
-						checkNotNull(this.sourceFile?.name),
-						this.source,
-						numTok.line,
-						numTok.column,
-						`Invalid array length '${raw}'`,
-					);
-					process.exit(1);
+					this.failAt(numTok, `Invalid array length '${raw}'`);
 				}
 			}
 			this.consume(
@@ -825,14 +794,10 @@ export class Parser {
 			params.push(param);
 			
 			if (isVariadic && this.check("DELIMITER") && checkNotNull(this.peek()).value === ",") {
-				reportError(
-					checkNotNull(this.sourceFile?.name),
-					this.source,
-					checkNotNull(this.peek()).line,
-					checkNotNull(this.peek()).column,
-					"Rest parameter must be the last parameter"
+				this.failAt(
+					checkNotNull(this.peek()),
+					"Rest parameter must be the last parameter",
 				);
-				process.exit(1);
 			}
 		} while (
 			this.match("DELIMITER") &&
@@ -845,7 +810,8 @@ export class Parser {
 	private parseCompilerKeyword(): Node {
 		const keyword = checkNotNull(this.advance());
 		if (!isCompilerKeywordToken(keyword)) {
-			throw new Error(
+			this.failAt(
+				checkNotNull(this.peek()),
 				`Unexpected token: ${checkNotNull(this.peek()).value} at line ${checkNotNull(this.peek()).line}`,
 			);
 		}
@@ -871,14 +837,14 @@ export class Parser {
 			case CompilerSymbols.extern:
 				return this.parseCompilerExtern();
 		}
-		throw new Error(`Unhandled compiler keyword: ${keyword.value}`);
+		this.failAt(keyword, `Unhandled compiler keyword: ${keyword.value}`);
 	}
 
 	private parseCompilerExtern(): Node {
 		// @extern name;
 		// Declares that 'name' is provided natively at runtime.
 		const name = this.consume("IDENTIFIER", "Expected identifier after @extern");
-		if (!name) throw new Error("Expected identifier after @extern");
+		if (!name) this.failAt(checkNotNull(this.peek()), "Expected identifier after @extern");
 		this.consume("DELIMITER", "Expected ';' after @extern declaration", Delimiters.SEMICOLON);
 		return new ExternDeclaration(name.value);
 	}
@@ -1021,14 +987,10 @@ export class Parser {
 		// C-style for loops (@for ($i = 0; i < 5; i = i + 1)) are not supported.
 		// Use range loops (@for (0..N) |i|) or condition loops (@for (cond)) instead.
 		if (this.check("DELIMITER") && this.peek()?.value === Delimiters.SEMICOLON) {
-			reportError(
-				checkNotNull(this.sourceFile?.name),
-				this.source,
-				forToken.line,
-				forToken.column,
+			this.failAt(
+				forToken,
 				"C-style for loops are not supported. Use '@for (0..N) |i|' for range loops or '@for (condition)' for condition loops.",
 			);
-			process.exit(1);
 		}
 
 		if (this.check("DELIMITER") && this.peek()?.value === ",") {
@@ -1233,14 +1195,10 @@ export class Parser {
 		const name = this.advance();
 
 		if (name?.type !== "IDENTIFIER") {
-			reportError(
-				checkNotNull(this.sourceFile?.name),
-				this.source,
-				checkNotNull(name).line,
-				checkNotNull(name).column,
+			this.failAt(
+				checkNotNull(name),
 				`Expected a valid function name but found "${name?.value}" instead.`,
 			);
-			process.exit(1);
 		}
 
 		this.consume(
@@ -1296,11 +1254,8 @@ export class Parser {
 		const _import = checkNotNull(this.peek());
 
 		if (_import.type !== "STRING") {
-			reportError(
-				checkNotNull(this.sourceFile?.name),
-				this.source,
-				_import.line,
-				_import.column,
+			this.failAt(
+				_import,
 				`Unexpected import value "${_import.value}". Expected a valid path.`,
 			);
 		}

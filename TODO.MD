@@ -92,6 +92,7 @@
 ### P6 — Tooling
 
 - [ ] **Comprehensive test suite** — tests for parser, compiler, and VM covering all language features.
+- [x] **Runtime stack traces** — VM errors print LLTS call stacks (`at func (file:line)`) to stderr with source context.
 - [ ] **CLI improvements** — better error reporting with LLTS source context, `--help`, `--version`.
 - [ ] **LSP** — syntax highlighting and basic diagnostics for editors.
 

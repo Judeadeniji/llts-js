@@ -15,7 +15,7 @@ export function defineNative(
 
 export function registerBuiltins(state: VMState) {
 	defineNative(state, "print", (...args: Value[]) => {
-		console.log(...args);
+		process.stdout.write(`${args.map(String).join(" ")}\n`);
 		return null;
 	});
 
@@ -54,7 +54,7 @@ export function registerBuiltins(state: VMState) {
 				}
 			}
 		}
-		console.log(msg);
+		process.stdout.write(`${msg}\n`);
 		return null;
 	});
 

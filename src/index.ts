@@ -1,5 +1,6 @@
 // others
 import { Parser } from "./parser";
+import { ReportedError, reportCompileMessage } from "./errors";
 import { VM } from "./vm";
 
 // ----------------------------------------------------------------------
@@ -90,7 +91,23 @@ async function parseInput(path: string, release: boolean) {
 		const vm = new VM();
 		vm.run(result.parsed, { debug: !release });
 	} catch (e) {
-		console.error(e);
+		if (e instanceof ReportedError || (e as { lltsReported?: boolean })?.lltsReported) {
+			process.exit(1);
+		}
+		if (e instanceof Error) {
+			const msg = e.message;
+			if (
+				msg.startsWith("CompileError:") ||
+				msg.startsWith("TypeCheckError:") ||
+				e.name === "TypeCheckError"
+			) {
+				reportCompileMessage(msg.replace(/^TypeCheckError:\s*/, ""));
+				process.exit(1);
+			}
+			process.stderr.write(`${msg}\n`);
+			process.exit(1);
+		}
+		process.stderr.write(`${String(e)}\n`);
 		process.exit(1);
 	}
 }

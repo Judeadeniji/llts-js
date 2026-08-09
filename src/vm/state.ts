@@ -9,6 +9,10 @@ export interface CallFrame {
 	argCount: number;
 	/** Relative local slots whose bindings are @const (shallow). */
 	constSlots: Set<number>;
+	/** LLTS function name for this frame (`<script>` for top-level). */
+	funcName: string;
+	/** Last known source line inside this frame. */
+	line: number;
 }
 
 export interface VMState {
@@ -31,6 +35,8 @@ export function createVMState(chunk: Chunk, parentState?: VMState): VMState {
 				baseSlot: 0,
 				argCount: 0,
 				constSlots: new Set(),
+				funcName: "<script>",
+				line: 1,
 			},
 		],
 		memory: parentState?.memory ?? new Int32Array(1024 * 1024),

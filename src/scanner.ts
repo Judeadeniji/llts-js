@@ -6,6 +6,11 @@ import {
 	checkNotNull,
 	UnaryOps,
 } from "./shared";
+import {
+	ReportedError,
+	reportLocationFrame,
+	reportSourceError,
+} from "./errors";
 
 // ----------------------------------------------------------------------
 
@@ -104,15 +109,6 @@ const isBool = (w: string) => w === "true" || w === "false";
 const isDelimiter = (char: string) =>
 	Object.values(Delimiters).includes(char as typeof Delimiters[keyof typeof Delimiters]);
 
-// ANSI Colors for the console
-const colors = {
-	reset: "\x1b[0m",
-	red: "\x1b[31m",
-	cyan: "\x1b[36m",
-	gray: "\x1b[90m",
-	bold: "\x1b[1m",
-};
-
 // 3. --- ERROR REPORTER ---
 
 export function reportError(
@@ -122,40 +118,7 @@ export function reportError(
 	column: number,
 	message: string,
 ) {
-	const lines = source.split("\n");
-	const lineIndex = line - 1;
-	const lineContent = lines[lineIndex];
-
-	if (typeof lineContent === "undefined") {
-		console.error(
-			`${path}: ${colors.red}Error:${colors.reset} ${message} (at line ${line})`,
-		);
-		return;
-	}
-
-	const lineNumberStr = line.toString();
-	const gutterPadding = " ".repeat(lineNumberStr.length);
-	const pointerPadding = " ".repeat(Math.max(0, column - 1));
-	const error = new Error();
-	error.name = "LLTS Error";
-	error.message = `\n${path}: ${colors.red}${colors.bold}Error:${colors.reset} ${message}`;
-
-	console.log(
-		`${colors.gray}   ${line - 1} |${colors.reset} ${lines[lineIndex - 1]}`,
-	);
-	console.log(
-		`${colors.cyan}  ${gutterPadding}--> line ${line}:${column}${colors.reset}`,
-	);
-	console.log(
-		`${colors.gray}   ${lineNumberStr} |${colors.reset} ${lineContent}`,
-	);
-	console.log(
-		`${colors.gray}   ${gutterPadding} |${colors.reset} ${pointerPadding}${colors.red}^${colors.reset}`,
-	);
-	console.log(
-		`${colors.gray}   ${line + 1} |${colors.reset} ${lines[lineIndex + 1]}`,
-	);
-	console.log(error.stack);
+	reportSourceError(path, source, line, column, message);
 }
 
 /**
@@ -176,8 +139,9 @@ export function assert(
 	column: number,
 ) {
 	if (!condition) {
-		reportError(path, source, line, column, msg);
-		process.exit(1);
+		reportSourceError(path, source, line, column, msg);
+		reportLocationFrame(path, line);
+		throw new ReportedError(`ParseError: ${msg}`, "ParseError");
 	}
 }
 
