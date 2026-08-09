@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 
 const ROOT = path.resolve(import.meta.dir, "..");
-const ENTRY = path.join(ROOT, "zig/zig-out/bin/llts");
+const ENTRY = path.join(ROOT, "src/index.ts");
 
 export interface RunResult {
 	stdout: string;
@@ -30,7 +30,7 @@ export function runSource(source: string): RunResult {
 
 /** Compile and run a file from the examples/ directory. */
 export function runFile(filePath: string): RunResult {
-	const result = spawnSync([ENTRY, "-i", filePath], {
+	const result = spawnSync(["bun", "run", ENTRY, "-i", filePath], {
 		cwd: ROOT,
 	});
 	const stdout = result.stdout.toString();

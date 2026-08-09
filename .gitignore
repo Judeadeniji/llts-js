@@ -27,12 +27,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .cache
 *.tsbuildinfo
 
-# Zig
-zig/.zig-cache/
-zig/zig-out/
-zig/*.txt
-zig/test.txt
-
 # IntelliJ based IDEs
 .idea
 
