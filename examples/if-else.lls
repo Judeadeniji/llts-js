@@ -1,4 +1,4 @@
-@const $std = @import("std");
+@const $std = @import("std/index");
 
 $a = 10;
 $b = 20;

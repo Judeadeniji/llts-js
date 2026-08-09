@@ -9,7 +9,7 @@ import fs from "fs";
 test("string operations", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 @const $s = "Hello World";
 print(string.len(s));
 print(string.concat("Hello ", "World"));
@@ -27,7 +27,7 @@ print(parts[2]);
 test("string operations: edge cases", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 print(string.len(""));
 print(string.indexOf("Hello", "xyz"));
 print(string.substr("Hello", 2, 0));
@@ -41,7 +41,7 @@ print(len(string.split("", ",")));
 test("string operations: case conversion and trim", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 print(string.toUpper("hello"));
 print(string.toLower("HELLO"));
 print(string.trim("   padded   "));
@@ -53,7 +53,7 @@ print(string.trim("   padded   "));
 test("string operations: replace and repeat", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 print(string.replace("foo bar foo", "foo", "baz"));
 print(string.repeat("ab", 3));
 `),
@@ -64,7 +64,7 @@ print(string.repeat("ab", 3));
 test("string operations: startsWith and endsWith", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 print(string.startsWith("Hello World", "Hello"));
 print(string.startsWith("Hello World", "World"));
 print(string.endsWith("Hello World", "World"));
@@ -77,7 +77,7 @@ print(string.endsWith("Hello World", "Hello"));
 test("string operations: substr with out-of-range length clamps to end", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 @const $s = "Hi";
 print(string.substr(s, 0, 100));
 `),
@@ -88,7 +88,7 @@ print(string.substr(s, 0, 100));
 test("string operations: negative index to indexOf on empty haystack", () => {
   expectOutput(
     runSource(`
-@const $string = @import("string");
+@const $string = @import("std/string");
 print(string.indexOf("", "x"));
 `),
     ["-1"],
@@ -102,7 +102,7 @@ print(string.indexOf("", "x"));
 test("math operations", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.min(10, 5));
 print(math.max(10, 5));
 print(math.abs(-10));
@@ -116,7 +116,7 @@ print(math.ceil(5.1));
 test("math operations: additional functions", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.round(5.5));
 print(math.round(5.4));
 print(math.pow(2, 10));
@@ -129,7 +129,7 @@ print(math.sqrt(64));
 test("math operations: edge cases with zero and negatives", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.abs(0));
 print(math.min(-5, -10));
 print(math.max(-5, -10));
@@ -143,7 +143,7 @@ print(math.ceil(-5.9));
 test("math operations: min/max with more than two arguments", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.min(3, 1, 4, 1, 5));
 print(math.max(3, 1, 4, 1, 5));
 `),
@@ -154,7 +154,7 @@ print(math.max(3, 1, 4, 1, 5));
 test("math.sqrt of a negative number returns an error", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 $r = math.sqrt(-4);
 print(@isError(r));
 `),
@@ -165,7 +165,7 @@ print(@isError(r));
 test("math constants: pi and e", () => {
   expectOutput(
     runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.floor(math.PI * 100));
 print(math.floor(math.E * 100));
 `),
@@ -181,7 +181,7 @@ test("io operations", () => {
   fs.writeFileSync("test.txt", "hello io");
   expectOutput(
     runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 print(io.readFile("test.txt"));
 `),
     ["hello io"],
@@ -191,7 +191,7 @@ print(io.readFile("test.txt"));
 
 test("io.writeFile creates a file with the given content", () => {
   runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 io.writeFile("write_test.txt", "written by lls");
 `);
   const content = fs.readFileSync("write_test.txt", "utf8");
@@ -205,7 +205,7 @@ test("io.exists returns true for an existing file and false otherwise", () => {
   fs.writeFileSync("exists_test.txt", "x");
   expectOutput(
     runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 print(io.exists("exists_test.txt"));
 print(io.exists("definitely_missing_file.txt"));
 `),
@@ -217,7 +217,7 @@ print(io.exists("definitely_missing_file.txt"));
 test("io.readFile on a missing file returns an error rather than throwing", () => {
   expectOutput(
     runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 $r = io.readFile("does_not_exist_anywhere.txt");
 print(@isError(r));
 `),
@@ -228,7 +228,7 @@ print(@isError(r));
 test("io.deleteFile removes a file", () => {
   fs.writeFileSync("delete_test.txt", "bye");
   runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 io.deleteFile("delete_test.txt");
 `);
   if (fs.existsSync("delete_test.txt")) {
@@ -239,7 +239,7 @@ io.deleteFile("delete_test.txt");
 test("io.appendFile appends rather than overwrites", () => {
   fs.writeFileSync("append_test.txt", "first-");
   runSource(`
-@const $io = @import("io");
+@const $io = @import("std/io");
 io.appendFile("append_test.txt", "second");
 `);
   const content = fs.readFileSync("append_test.txt", "utf8");
@@ -261,8 +261,8 @@ test("importing an unknown module name is a compile-time error", () => {
 
 test("aliasing two different modules to distinct names works independently", () => {
   expectOutput(runSource(`
-@const $s = @import("string");
-@const $m = @import("math");
+@const $s = @import("std/string");
+@const $m = @import("std/math");
 print(s.len("abcd"));
 print(m.max(1, 9));
 `), ["4", "9"]);
@@ -270,8 +270,8 @@ print(m.max(1, 9));
 
 test("importing the same module twice under different aliases both work", () => {
   expectOutput(runSource(`
-@const $m1 = @import("math");
-@const $m2 = @import("math");
+@const $m1 = @import("std/math");
+@const $m2 = @import("std/math");
 print(m1.abs(-3));
 print(m2.abs(-3));
 `), ["3", "3"]);
@@ -279,7 +279,7 @@ print(m2.abs(-3));
 
 test("calling a module function that doesn't exist is a compile-time error", () => {
   expectError(runSource(`
-@const $math = @import("math");
+@const $math = @import("std/math");
 print(math.notARealFunction(1));
 `), "CompileError: 'math' has no export 'notARealFunction'");
 });
@@ -296,8 +296,8 @@ print(string.len("hi"));
 
 test("chaining string and math module calls together", () => {
   expectOutput(runSource(`
-@const $string = @import("string");
-@const $math = @import("math");
+@const $string = @import("std/string");
+@const $math = @import("std/math");
 @const $s = "12345";
 print(math.max(string.len(s), 3));
 `), ["5"]);
@@ -305,8 +305,8 @@ print(math.max(string.len(s), 3));
 
 test("io.writeFile followed by io.readFile round-trips content built from string module", () => {
   runSource(`
-@const $io = @import("io");
-@const $string = @import("string");
+@const $io = @import("std/io");
+@const $string = @import("std/string");
 @const $msg = string.concat("round", "trip");
 io.writeFile("roundtrip_test.txt", msg);
 print(io.readFile("roundtrip_test.txt"));

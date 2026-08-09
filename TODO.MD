@@ -31,11 +31,12 @@
 - [x] `OP_SET_PROPERTY` — dynamic property assignment on objects.
 - [x] Mutual recursion + call graph cycle detection.
 
-### Standard Library (`std/`)
-- [x] `std.math`: `add`, `sub`, `mul`, `div`, `mod`, `pow`, `sqr`.
-- [x] `std.debug`: `printLn`, `log`, `assert`.
-- [x] `std.mem`: `alloc`.
-- [x] `std.io`: stubs only (see roadmap).
+### Standard Library (`std/`) — optional library, not language core
+- Imports use explicit paths (e.g. `@import("std/math")`); the compiler has no stdlib short-name aliases.
+- [x] `std/math`: `add`, `sub`, `mul`, `div`, `mod`, `pow`, `sqr`, `min`, `max`, …
+- [x] `std/debug`: `printLn`, `log`, `assert`.
+- [x] `std/mem`: `alloc`.
+- [x] `std/io`: file/stdin helpers via host `__*` bindings.
 
 ### Tooling
 - [x] Basic test suite (`bun test tests/`).
@@ -74,7 +75,7 @@
 
 - [ ] **Type checker pass** — a semantic analysis phase that verifies parameter types, return types, and struct field types before bytecode emission.
 - [ ] **Return type annotations enforced** — `@func foo(): Builder` declares the return type; compiler verifies it matches the inferred `returnType`.
-- [ ] **`pub` for user files** — cross-file visibility for user-defined modules, not just `std/`.
+- [ ] **`pub` for user files** — cross-file visibility for user-defined modules (same `pub` mechanism as any library).
 
 ### P5 — Memory
 

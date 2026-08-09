@@ -1,5 +1,8 @@
 // others
-import { type Chunk, OpCode } from "../bytecode";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { LLTSFunction, type Chunk, OpCode } from "../bytecode";
+import { Parser } from "../parser";
 import { emitByte, emitBytes, emitJump, patchJump } from "./emit";
 import { type CompilerState, createCompilerState } from "./state";
 import { beginScope } from "./scope";
@@ -178,9 +181,6 @@ function resolveImports(
 	currentModulePath?: string
 ) {
 	const newStatements: ast.Node[] = [];
-	const fs = require("node:fs");
-	const path = require("node:path");
-	const Parser = require("../parser").Parser;
 
 	for (const stmt of document.statements) {
 		let isImport = false;
@@ -201,11 +201,7 @@ function resolveImports(
 
 		if (isImport && importNode) {
 			let importPath = importNode.importPath;
-			if (importPath === "std") {
-				importPath = "std/index.lls";
-			} else if (["string", "math", "io", "mem", "debug"].includes(importPath)) {
-				importPath = "std/" + importPath + ".lls";
-			} else if (!importPath.endsWith(".lls")) {
+			if (!importPath.endsWith(".lls")) {
 				importPath += ".lls";
 			}
 
@@ -213,7 +209,7 @@ function resolveImports(
 
 			if (declNode) {
 				state.globalTypes.set(`$${declNode.name}`, `module:${importPath}`);
-				if ((declNode as any).isPublic && currentModulePath) {
+				if ((declNode).isPublic && currentModulePath) {
 					state.globalTypes.set(`$${currentModulePath}::${declNode.name}`, `module:${importPath}`);
 				}
 			}
@@ -231,19 +227,19 @@ function resolveImports(
 				resolveImports(state, doc, process.cwd(), visited, importPath);
 
 				for (const istmt of doc.statements) {
-					if (istmt.nodeName === "StructDeclaration" && (istmt as any).isPublic) {
+					if (istmt.nodeName === "StructDeclaration" && (istmt as ast.StructDeclaration).isPublic) {
 						const s = istmt as ast.StructDeclaration;
 						if (!s.name.includes("::")) s.name = `${importPath}::${s.name}`;
 						newStatements.push(s);
-					} else if (istmt.nodeName === "FunctionDeclaration" && (istmt as any).isPublic) {
+					} else if (istmt.nodeName === "FunctionDeclaration" && (istmt as ast.FunctionDeclaration).isPublic) {
 						const f = istmt as ast.FunctionDeclaration;
 						if (!f.name.includes("::")) f.name = `${importPath}::${f.name}`;
 						newStatements.push(f);
-					} else if (istmt.nodeName === "DeclarationNode" && (istmt as any).isPublic) {
+					} else if (istmt.nodeName === "DeclarationNode" && (istmt as ast.DeclarationExpression).isPublic) {
 						const d = istmt as ast.DeclarationExpression;
 						if (!d.name.includes("::")) d.name = `${importPath}::${d.name}`;
 						newStatements.push(d);
-					} else if (istmt.nodeName === "ExternDeclaration" && (istmt as any).isPublic) {
+					} else if (istmt.nodeName === "ExternDeclaration" && (istmt as ast.ExternDeclaration).isPublic) {
 						const e = istmt as ast.ExternDeclaration;
 						if (!e.name.includes("::")) e.name = `${importPath}::${e.name}`;
 						newStatements.push(e);
@@ -280,7 +276,6 @@ export function compile(document: ast.DocumentBody): { chunk: Chunk, compilerSta
 	}
 
 	// Compile all functions so they get an address (for dynamic calls / exports)
-	const { LLTSFunction } = require("../bytecode");
 	for (const [_name, def] of state.functions.entries()) {
 		def.address = state.chunk.code.length;
 		state.chunk.functions.set(_name, new LLTSFunction(_name, def.address, def.ast.params?.params.length ?? 0, def.ast.params?.isVariadic ?? false));

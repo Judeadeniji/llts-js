@@ -1,4 +1,4 @@
-@const $std = @import("std");
+@const $std = @import("std/index");
 
 @func add(x: i32, y: i32): i32 {
     return x + y;

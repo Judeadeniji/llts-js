@@ -1,4 +1,5 @@
 // others
+import * as fs from "node:fs";
 import { NativeFunction, type Value } from "../bytecode";
 import type { VMState } from "./state";
 
@@ -122,7 +123,6 @@ export function registerBuiltins(state: VMState) {
 	defineNative(state, "__readFile", (...args: Value[]) => {
 		const path = readString(args[0] as number);
 		try {
-			const fs = require("fs");
 			const content = fs.readFileSync(path, "utf8");
 			return writeString(content);
 		} catch (e: any) {
@@ -141,7 +141,6 @@ export function registerBuiltins(state: VMState) {
 
 	defineNative(state, "__readLine", (...args: Value[]) => {
 		try {
-			const fs = require("fs");
 			// Read a single line from stdin.
 			// Since Node doesn't have a simple synchronous prompt built-in without blocking weirdly, 
 			// we can use a small buffer read.
@@ -208,12 +207,24 @@ export function registerBuiltins(state: VMState) {
 		return writeString(a + b);
 	});
 
-	defineNative(state, "std/math.lls::min", (...args: Value[]) => {
-		return Math.min(...args as number[]);
+	defineNative(state, "__min", (...args: Value[]) => {
+		const ptr = args[0] as number;
+		const len = state.memory[ptr - 1] as number;
+		const nums: number[] = [];
+		for (let i = 0; i < len; i++) {
+			nums.push(state.memory[ptr + i] as number);
+		}
+		return Math.min(...nums);
 	});
 
-	defineNative(state, "std/math.lls::max", (...args: Value[]) => {
-		return Math.max(...args as number[]);
+	defineNative(state, "__max", (...args: Value[]) => {
+		const ptr = args[0] as number;
+		const len = state.memory[ptr - 1] as number;
+		const nums: number[] = [];
+		for (let i = 0; i < len; i++) {
+			nums.push(state.memory[ptr + i] as number);
+		}
+		return Math.max(...nums);
 	});
 
 	defineNative(state, "__pow", (...args: Value[]) => {
@@ -233,25 +244,21 @@ export function registerBuiltins(state: VMState) {
 	});
 
 	defineNative(state, "__writeFile", (...args: Value[]) => {
-		const fs = require("fs");
 		fs.writeFileSync(readString(args[0] as number), readString(args[1] as number));
 		return null;
 	});
 
 	defineNative(state, "__appendFile", (...args: Value[]) => {
-		const fs = require("fs");
 		fs.appendFileSync(readString(args[0] as number), readString(args[1] as number));
 		return null;
 	});
 
 	defineNative(state, "__deleteFile", (...args: Value[]) => {
-		const fs = require("fs");
 		fs.unlinkSync(readString(args[0] as number));
 		return null;
 	});
 
 	defineNative(state, "__exists", (...args: Value[]) => {
-		const fs = require("fs");
 		return fs.existsSync(readString(args[0] as number));
 	});
 }

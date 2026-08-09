@@ -12,7 +12,7 @@ import { expectOutput, runSource } from "./helpers";
 
 test("dynamic property set and get roundtrip", () => {
 	const result = runSource(`
-@const $std = @import("std");
+@const $std = @import("std/index");
 $obj = std.debug;
 obj.x = 42;
 print(obj.x);

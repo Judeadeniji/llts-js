@@ -1,4 +1,4 @@
-@const $std = @import("std");
+@const $std = @import("std/index");
 
 # Allocate 5 slots in our VM's linear memory
 $arr = std.mem.alloc(5);

@@ -47,10 +47,14 @@ pub @func sqrt(a) {
     return __sqrt(a);
 }
 
-# min and max are variadic natives - declared with @extern so the compiler
-# knows they exist; the VM provides the implementation.
-pub @extern min;
-pub @extern max;
+# min/max: rest args are packed into an array; host natives unpack it.
+pub @func min(...args) {
+    return __min(args);
+}
+
+pub @func max(...args) {
+    return __max(args);
+}
 
 pub @const $PI = 3.141592653589793;
 pub @const $E = 2.718281828459045;
