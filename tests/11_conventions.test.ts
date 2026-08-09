@@ -1,6 +1,7 @@
 /**
- * Arrays/slices use global len(); negative indices are rejected.
+ * Arrays/slices use global len(); negative/OOB indices are rejected.
  * `$name` is declaration-only; uses omit the sigil.
+ * Runtime errors report LLTS file:line via OP_LINE markers.
  */
 import { test } from "bun:test";
 import { runSource, expectOutput, expectError } from "./helpers";
@@ -42,7 +43,39 @@ test("negative array index is a runtime error", () => {
 $a = [1, 2, 3];
 print(a[-1]);
 `),
-		"Array index must be >= 0",
+		"Array index out of bounds",
+	);
+});
+
+test("index equal to len is out of bounds", () => {
+	expectError(
+		runSource(`
+$a = [1, 2, 3];
+print(a[3]);
+`),
+		"Array index out of bounds",
+	);
+});
+
+test("set index out of bounds is a runtime error", () => {
+	expectError(
+		runSource(`
+$a = [1, 2, 3];
+a[5] = 9;
+`),
+		"Array index out of bounds",
+	);
+});
+
+test("struct field access still works", () => {
+	expectOutput(
+		runSource(`
+@struct Point { x: int; y: int; }
+$p = Point { x: 1, y: 2 };
+print(p.x);
+print(p.y);
+`),
+		["1", "2"],
 	);
 });
 
@@ -98,4 +131,16 @@ print(a);
 `),
 		["2"],
 	);
+});
+
+test("runtime OOB error includes LLTS source location", () => {
+	const res = runSource(`
+$a = [1, 2];
+print(a[9]);
+`);
+	expectError(res, "Array index out of bounds");
+	const combined = res.stderr + res.stdout;
+	if (!combined.includes(".lls") || !/line \d+/.test(combined)) {
+		throw new Error(`Expected LLTS file:line in error output, got:\n${combined}`);
+	}
 });

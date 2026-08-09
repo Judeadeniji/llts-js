@@ -3,7 +3,7 @@ import { resolveType } from "./types";
 // others
 import { OpCode } from "../bytecode";
 import { checkNotNull } from "../shared";
-import { emitByte, emitBytes, emitConstant, emitJump, patchJump } from "./emit";
+import { emitByte, emitBytes, emitConstant, emitJump, emitLineIfNeeded, patchJump } from "./emit";
 import { beginScope, endScope, resolveLocal, resolveVariable } from "./scope";
 import { type CompilerState, currentChunk } from "./state";
 import { compileStatement } from "./statements";
@@ -34,6 +34,7 @@ export function tryResolveStaticPath(state: CompilerState, node: ast.Node): stri
 // ----------------------------------------------------------------------
 
 export function compileExpression(state: CompilerState, node: ast.Node) {
+	emitLineIfNeeded(state, node.loc?.line);
 	switch (node.nodeName) {
 		case "LiteralNode": {
 			const lit = node as ast.LiteralExpression;
@@ -105,7 +106,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					// Use the safe double-emit pattern:
 					compileExpression(state, idxExpr.object); // obj, idx, obj2
 					compileExpression(state, idxExpr.index);  // obj, idx, obj2, idx2
-					emitByte(state, OpCode.OP_GET_INDEX);      // obj, idx, currentVal
+					emitByte(state, OpCode.OP_GET_ARRAY);      // obj, idx, currentVal
 					compileExpression(state, assign.right);    // obj, idx, currentVal, rhs
 					emitByte(state, arithOp);                  // obj, idx, newVal
 				} else {
@@ -113,7 +114,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 					compileExpression(state, idxExpr.index);
 					compileExpression(state, assign.right);
 				}
-				emitByte(state, OpCode.OP_SET_INDEX);
+				emitByte(state, OpCode.OP_SET_ARRAY);
 
 			} else if (assign.left.nodeName === "MemberExpression") {
 				const memExpr = assign.left as ast.MemberExpression;
@@ -333,7 +334,7 @@ export function compileExpression(state: CompilerState, node: ast.Node) {
 			const indexExpr = node as ast.IndexExpression;
 			compileExpression(state, indexExpr.object);
 			compileExpression(state, indexExpr.index);
-			emitByte(state, OpCode.OP_GET_INDEX);
+			emitByte(state, OpCode.OP_GET_ARRAY);
 			break;
 		}
 		case "StructInitialization": {

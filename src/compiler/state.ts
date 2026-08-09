@@ -47,6 +47,7 @@ export interface CompilerState {
 	nativeGlobals: Set<string>; // native function/value names registered at runtime
 	inlineReturnJumps: number[][];
 	loops: LoopTracker[];
+	lastEmittedLine: number;
 }
 
 export function createCompilerState(): CompilerState {
@@ -65,6 +66,7 @@ export function createCompilerState(): CompilerState {
 		]),
 		inlineReturnJumps: [],
 		loops: [],
+		lastEmittedLine: -1,
 	};
 
 	state.structs.set("string", {

@@ -2,6 +2,7 @@
 import { type Chunk, OpCode } from "../bytecode";
 import { emitByte, emitBytes, emitJump, patchJump } from "./emit";
 import { type CompilerState, createCompilerState } from "./state";
+import { beginScope } from "./scope";
 import { compileFunction, compileStatement } from "./statements";
 import * as ast from "../ast";
 
@@ -257,8 +258,10 @@ function resolveImports(
 	document.statements = newStatements;
 }
 
-export function compile(document: ast.DocumentBody): Chunk {
+export function compile(document: ast.DocumentBody): { chunk: Chunk, compilerState: CompilerState } {
 	const state = createCompilerState();
+	state.chunk.file = document.path || "<anonymous>";
+	state.chunk.source = document.source || "";
 
 	// Phase 0: Resolve imports and inline public declarations
 	resolveImports(state, document, process.cwd());
@@ -294,6 +297,9 @@ export function compile(document: ast.DocumentBody): Chunk {
 	}
 
 	patchJump(state, mainJump);
+
+	// Top-level script is the outermost scope of the main frame
+	beginScope(state);
 
 	// We only compile non-function/struct statements in the main body
 	for (const stmt of document.statements) {

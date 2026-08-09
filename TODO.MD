@@ -66,9 +66,9 @@
 
 ### P3 — Safety & Correctness
 
-- [ ] **Array bounds checking** — `arr[i]` should throw a runtime error when `i >= length`, not silently corrupt heap.
-- [ ] **`@const` at VM level** — constants frozen after initial write; mutation = runtime error.
-- [ ] **LLTS source locations in runtime errors** — VM errors should report the LLTS file/line, not the TypeScript source line.
+- [x] **Array bounds checking** — `arr[i]` should throw a runtime error when `i >= length`, not silently corrupt heap.
+- [x] **`@const` at VM level** — constants frozen after initial write; mutation = runtime error.
+- [x] **LLTS source locations in runtime errors** — VM errors should report the LLTS file/line, not the TypeScript source line.
 
 ### P4 — Type System
 

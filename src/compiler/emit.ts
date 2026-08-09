@@ -40,3 +40,10 @@ export function emitLoop(state: CompilerState, loopStart: number) {
 	emitByte(state, (offset >> 8) & 0xff);
 	emitByte(state, offset & 0xff);
 }
+
+/** Emit OP_LINE when the source line changes (debug marker in the bytecode stream). */
+export function emitLineIfNeeded(state: CompilerState, line: number | undefined) {
+	if (line === undefined || line === state.lastEmittedLine) return;
+	state.lastEmittedLine = line;
+	emitBytes(state, OpCode.OP_LINE, (line >> 8) & 0xff, line & 0xff);
+}

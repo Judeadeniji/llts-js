@@ -1304,7 +1304,10 @@ export class Parser {
 		// console.log(...this.tokens)
 		// process.exit(0);
 
-		return this.buildAst();
+		const doc = this.buildAst();
+		doc.path = path;
+		doc.source = source;
+		return doc;
 	}
 
 	public async parseFile(path: string): Promise<{

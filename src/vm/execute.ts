@@ -1,10 +1,19 @@
 // others
-import { type LLTSFunction, NativeFunction, OpCode, type Value, ObjError } from "../bytecode";
+import { type LLTSFunction, NativeFunction, OpCode, type Value } from "../bytecode";
 import { checkNotNull } from "../shared";
+import { reportError } from "../scanner";
 import { peek, pop, push } from "./stack";
 import type { VMState } from "./state";
 
 // ----------------------------------------------------------------------
+
+function runtimeError(state: VMState, message: string): never {
+	const file = state.chunk.file || "<anonymous>";
+	const source = state.chunk.source || "";
+	const line = state.currentLine || 1;
+	reportError(file, source, line, 1, message);
+	throw new Error(`RuntimeError: ${message}`);
+}
 
 export function execute(state: VMState, startIp: number = 0) {
 	const chunk = state.chunk;
@@ -18,6 +27,15 @@ export function execute(state: VMState, startIp: number = 0) {
 	while (ip < chunk.code.length) {
 		const op = readByte();
 		switch (op) {
+			case OpCode.OP_LINE: {
+				state.currentLine = readShort();
+				break;
+			}
+			case OpCode.OP_MARK_CONST: {
+				const slot = readByte();
+				frame.constSlots.add(slot);
+				break;
+			}
 			case OpCode.OP_CONSTANT:
 				push(state, readConstant());
 				break;
@@ -30,9 +48,14 @@ export function execute(state: VMState, startIp: number = 0) {
 			case OpCode.OP_FALSE:
 				push(state, false);
 				break;
-			case OpCode.OP_POP:
+			case OpCode.OP_POP: {
+				const relativeSlot = state.stack.length - 1 - frame.baseSlot;
+				if (relativeSlot >= 0) {
+					frame.constSlots.delete(relativeSlot);
+				}
 				pop(state);
 				break;
+			}
 			case OpCode.OP_DUP:
 				push(state, peek(state, 0));
 				break;
@@ -69,17 +92,15 @@ export function execute(state: VMState, startIp: number = 0) {
 			}
 			case OpCode.OP_SET_LOCAL: {
 				const setLocalSlot = readByte();
+				if (frame.constSlots.has(setLocalSlot)) {
+					runtimeError(state, "Cannot reassign to constant binding");
+				}
 				state.stack[frame.baseSlot + setLocalSlot] = peek(state, 0);
 				break;
 			}
 			case OpCode.OP_GET_INDEX: {
 				const index = pop(state) as number;
 				const ptr = pop(state) as number;
-				if (index < 0) {
-					throw new Error(
-						"RuntimeError: Array index must be >= 0; use len(arr) for the length",
-					);
-				}
 				push(state, checkNotNull(state.memory[ptr + index]));
 				break;
 			}
@@ -87,9 +108,32 @@ export function execute(state: VMState, startIp: number = 0) {
 				const value = pop(state) as number;
 				const index = pop(state) as number;
 				const ptr = pop(state) as number;
-				if (index < 0) {
-					throw new Error(
-						"RuntimeError: Array index must be >= 0; use len(arr) for the length",
+				state.memory[ptr + index] = value;
+				push(state, value);
+				break;
+			}
+			case OpCode.OP_GET_ARRAY: {
+				const index = pop(state) as number;
+				const ptr = pop(state) as number;
+				const len = state.memory[ptr - 1] as number;
+				if (index < 0 || index >= len) {
+					runtimeError(
+						state,
+						`Array index out of bounds: ${index} (len ${len}); use len(arr)`,
+					);
+				}
+				push(state, checkNotNull(state.memory[ptr + index]));
+				break;
+			}
+			case OpCode.OP_SET_ARRAY: {
+				const value = pop(state) as number;
+				const index = pop(state) as number;
+				const ptr = pop(state) as number;
+				const len = state.memory[ptr - 1] as number;
+				if (index < 0 || index >= len) {
+					runtimeError(
+						state,
+						`Array index out of bounds: ${index} (len ${len}); use len(arr)`,
 					);
 				}
 				state.memory[ptr + index] = value;
@@ -369,10 +413,15 @@ export function execute(state: VMState, startIp: number = 0) {
 					state.stack.pop(); // remove the duplicated last argument
 
 					frame.returnIp = ip;
-					frame = { returnIp: 0, baseSlot: state.stack.length - argCount, argCount };
+					frame = {
+						returnIp: 0,
+						baseSlot: state.stack.length - argCount,
+						argCount,
+						constSlots: new Set(),
+					};
 					state.frames.push(frame);
 					if (state.frames.length > 256)
-						throw new Error("Maximum call stack size exceeded");
+						runtimeError(state, "Maximum call stack size exceeded");
 					ip = func.address;
 				} else {
 					throw new Error("Can only dynamic call NativeFunctions or LLTSFunctions.");
@@ -418,10 +467,15 @@ export function execute(state: VMState, startIp: number = 0) {
 				const argCount = readByte();
 
 				frame.returnIp = ip;
-				frame = { returnIp: 0, baseSlot: state.stack.length - argCount, argCount };
+				frame = {
+					returnIp: 0,
+					baseSlot: state.stack.length - argCount,
+					argCount,
+					constSlots: new Set(),
+				};
 				state.frames.push(frame);
 				if (state.frames.length > 256)
-					throw new Error("Maximum call stack size exceeded");
+					runtimeError(state, "Maximum call stack size exceeded");
 				ip = address;
 				break;
 			}

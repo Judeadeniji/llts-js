@@ -44,6 +44,8 @@ export enum OpCode {
 	// Arrays and Memory
 	OP_GET_INDEX,
 	OP_SET_INDEX,
+	OP_GET_ARRAY, // length-prefixed slice: bounds-checked get
+	OP_SET_ARRAY, // length-prefixed slice: bounds-checked set
 
 	// Control Flow
 	OP_JUMP, // [OP, offset1, offset2]
@@ -66,6 +68,11 @@ export enum OpCode {
 	OP_CALL, // [OP, arg_count] (Calls a dynamic/native function off stack)
 	OP_CALL_STATIC, // [OP, address_high, address_low, arg_count]
 	OP_PACK_REST, // [OP, named_param_count] (Packs rest parameters into an array)
+
+	// Debug (strippable): [OP, line_hi, line_lo]
+	OP_LINE,
+	// Mark local slot as const binding: [OP, slot]
+	OP_MARK_CONST,
 }
 
 export type Value =
@@ -98,6 +105,8 @@ export class Chunk {
 	code: number[] = [];
 	constants: Value[] = [];
 	functions: Map<string, LLTSFunction> = new Map();
+	file: string = "<anonymous>";
+	source: string = "";
 
 	write(byte: number) {
 		this.code.push(byte);

@@ -61,6 +61,8 @@ export class Node implements AST {
 
 export class DocumentBody extends Node {
 	override readonly nodeName = "DocumentBody";
+	public path: string = "<anonymous>";
+	public source: string = "";
 
 	constructor(
 		public statements: Node[] = [],

@@ -6,6 +6,7 @@ import {
 	emitBytes,
 	emitConstant,
 	emitJump,
+	emitLineIfNeeded,
 	emitLoop,
 	patchJump,
 } from "./emit";
@@ -17,6 +18,7 @@ import * as ast from "../ast";
 // ----------------------------------------------------------------------
 
 export function compileStatement(state: CompilerState, node: ast.Node) {
+	emitLineIfNeeded(state, node.loc?.line);
 	switch (node.nodeName) {
 		case "FunctionDeclaration": {
 			compileFunction(state, node as ast.FunctionDeclaration);
@@ -41,7 +43,10 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 				typeName = (decl.value as ast.StructInitialization).name;
 			}
 
-			if (state.scopeDepth > 0) {
+			// Scope-first: user bindings live in the current scope (top-level = outer script scope).
+			// Module-qualified public exports (`path::name`) stay globals for static module lookup.
+			const isModuleExport = decl.name.includes("::");
+			if (state.scopeDepth > 0 && !isModuleExport) {
 				for (let i = state.locals.length - 1; i >= 0; i--) {
 					const local = state.locals[i];
 					if (local.depth < state.scopeDepth) break;
@@ -55,6 +60,9 @@ export function compileStatement(state: CompilerState, node: ast.Node) {
 					typeName,
 					isConst: decl.isConst,
 				});
+				if (decl.isConst) {
+					emitBytes(state, OpCode.OP_MARK_CONST, state.locals.length - 1);
+				}
 			} else {
 				if (state.globalVars.has(decl.name)) {
 					throw new Error(`CompileError: Variable '${decl.name}' already declared in this scope`);
